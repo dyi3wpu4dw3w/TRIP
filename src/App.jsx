@@ -15,65 +15,134 @@ const initialTrips=[
 const money=n=>new Intl.NumberFormat('ar-SD').format(n)+' ج.س';
 
 function ChatCenter({session,notify}){
- const [role,setRole]=useState('passenger'),[loading,setLoading]=useState(true),[threads,setThreads]=useState([]),[active,setActive]=useState(null),[messages,setMessages]=useState([]),[draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[recording,setRecording]=useState(false),[callInfo,setCallInfo]=useState(false);
- const recorder=React.useRef(null), chunks=React.useRef([]);
+ const [role,setRole]=useState('passenger'),[loading,setLoading]=useState(true),[threads,setThreads]=useState([]),[active,setActive]=useState(null),[messages,setMessages]=useState([]),[draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[recording,setRecording]=useState(false);
+ const [callState,setCallState]=useState('idle'),[incomingCall,setIncomingCall]=useState(null),[muted,setMuted]=useState(false),[callError,setCallError]=useState('');
+ const recorder=React.useRef(null),chunks=React.useRef([]),remoteAudioRef=React.useRef(null);
+ const callRef=React.useRef({pc:null,stream:null,callId:null,conversationId:null});
+ const pendingIceRef=React.useRef([]);
  const user=session?.user;
+ const cleanupCall=()=>{
+  const c=callRef.current;
+  try{c.pc?.getSenders?.().forEach(s=>s.track?.stop());c.pc?.close()}catch{}
+  c.stream?.getTracks?.().forEach(t=>t.stop());
+  callRef.current={pc:null,stream:null,callId:null,conversationId:null};
+  pendingIceRef.current=[];setIncomingCall(null);setCallState('idle');setMuted(false);
+  if(remoteAudioRef.current)remoteAudioRef.current.srcObject=null;
+ };
+ const sendSignal=async(type,payload={},callId=callRef.current.callId,conversationId=callRef.current.conversationId)=>{
+  if(!conversationId||!callId||!user)return;
+  const r=await supabase.from('conversation_call_signals').insert({conversation_id:conversationId,sender_id:user.id,call_id:callId,signal_type:type,payload});
+  if(r.error)throw r.error;
+ };
+ const createPeer=async(conversationId,callId,stream)=>{
+  const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+  callRef.current={pc,stream,callId,conversationId};
+  stream.getTracks().forEach(track=>pc.addTrack(track,stream));
+  pc.onicecandidate=e=>{if(e.candidate)sendSignal('ice',e.candidate.toJSON(),callId,conversationId).catch(err=>{setCallError('تعذر إرسال بيانات الاتصال: '+err.message)})};
+  pc.ontrack=e=>{if(remoteAudioRef.current){remoteAudioRef.current.srcObject=e.streams[0];remoteAudioRef.current.play?.().catch(()=>{})}};
+  pc.onconnectionstatechange=()=>{if(pc.connectionState==='connected'){setCallState('active');setCallError('')}else if(['failed','disconnected'].includes(pc.connectionState)){setCallState('failed');setCallError('انقطع الاتصال أو تعذر إنشاء مسار صوتي. جرّب الاتصال مرة أخرى.')}};
+  return pc;
+ };
+ const handleSignal=async s=>{
+  if(!s||s.sender_id===user?.id||s.conversation_id!==active?.id)return;
+  const current=callRef.current;
+  if(s.signal_type==='offer'){
+   if(current.pc||incomingCall)return;
+   setIncomingCall({callId:s.call_id,conversationId:s.conversation_id,offer:s.payload?.description||s.payload});
+   setCallState('incoming');return;
+  }
+  if(s.signal_type==='ice'){
+   const candidate=s.payload?.candidate||s.payload;
+   if(!candidate)return;
+   if(current.pc?.remoteDescription){try{await current.pc.addIceCandidate(new RTCIceCandidate(candidate))}catch{}}
+   else pendingIceRef.current.push(candidate);
+   return;
+  }
+  if(s.signal_type==='answer'&&current.pc&&current.callId===s.call_id){
+   try{await current.pc.setRemoteDescription(new RTCSessionDescription(s.payload?.description||s.payload));for(const c of pendingIceRef.current.splice(0))await current.pc.addIceCandidate(new RTCIceCandidate(c));setCallState('connecting')}catch(e){setCallError('تعذر إكمال الاتصال: '+e.message)}
+   return;
+  }
+  if((s.signal_type==='hangup'||s.signal_type==='reject')&&current.callId===s.call_id){cleanupCall();notify(s.signal_type==='reject'?'تم رفض المكالمة.':'انتهت المكالمة.')}
+ };
  const loadThreads=async()=>{
-  if(!user||!supabase){setLoading(false);return;}
+  if(!user||!supabase){setLoading(false);return}
   setLoading(true);
   const p=await supabase.from('profiles').select('requested_role').eq('id',user.id).maybeSingle();
   const currentRole=user.app_metadata?.role==='admin'?'admin':(p.data?.requested_role||'passenger');
   setRole(currentRole);
   if(currentRole==='passenger'){
    const support=await supabase.from('conversations').select('id').eq('kind','support').eq('passenger_id',user.id).maybeSingle();
-   if(!support.data){await supabase.from('conversations').insert({kind:'support',passenger_id:user.id});}
-   const q=await supabase.from('conversations').select('*').eq('passenger_id',user.id).order('created_at',{ascending:false});
-   setThreads(q.data||[]);
+   if(!support.data)await supabase.from('conversations').insert({kind:'support',passenger_id:user.id});
+   const q=await supabase.from('conversations').select('*').eq('passenger_id',user.id).order('created_at',{ascending:false});setThreads(q.data||[]);
   }else if(currentRole==='operator'){
    const ops=await supabase.from('operators').select('id').eq('owner_id',user.id).eq('verified',true);
-   if(!ops.error&&ops.data?.length){
-    for(const op of ops.data){
-     const links=await supabase.from('operator_drivers').select('driver_id').eq('operator_id',op.id);
-     for(const link of (links.data||[])){
-      const exists=await supabase.from('conversations').select('id').eq('kind','operator_driver').eq('operator_id',op.id).eq('operator_user_id',user.id).eq('driver_user_id',link.driver_id).maybeSingle();
-      if(!exists.data) await supabase.from('conversations').insert({kind:'operator_driver',operator_id:op.id,operator_user_id:user.id,driver_user_id:link.driver_id});
-     }
-    }
-   }
-   const q=await supabase.from('conversations').select('*').order('created_at',{ascending:false});
-   setThreads(q.data||[]);
-  }else{
-   const q=await supabase.from('conversations').select('*').order('created_at',{ascending:false});
-   setThreads(q.data||[]);
-  }
+   if(!ops.error&&ops.data?.length)for(const op of ops.data){const links=await supabase.from('operator_drivers').select('driver_id').eq('operator_id',op.id);for(const link of links.data||[]){const exists=await supabase.from('conversations').select('id').eq('kind','operator_driver').eq('operator_id',op.id).eq('operator_user_id',user.id).eq('driver_user_id',link.driver_id).maybeSingle();if(!exists.data)await supabase.from('conversations').insert({kind:'operator_driver',operator_id:op.id,operator_user_id:user.id,driver_user_id:link.driver_id})}}
+   const q=await supabase.from('conversations').select('*').order('created_at',{ascending:false});setThreads(q.data||[]);
+  }else{const q=await supabase.from('conversations').select('*').order('created_at',{ascending:false});setThreads(q.data||[])}
   setLoading(false);
  };
- useEffect(()=>{loadThreads()},[user?.id]);
+ useEffect(()=>{loadThreads();return()=>cleanupCall()},[user?.id]);
  useEffect(()=>{
-  if(!active)return;
+  if(!active||!user)return;
   const load=async()=>{const r=await supabase.from('messages').select('*').eq('conversation_id',active.id).order('created_at');if(!r.error){setMessages(r.data||[]);const unread=(r.data||[]).filter(m=>m.sender_id!==user.id&&!m.read_at);if(unread.length)await supabase.from('messages').update({read_at:new Date().toISOString()}).in('id',unread.map(m=>m.id));}};
   load();
-  const ch=supabase.channel('trip-chat-'+active.id).on('postgres_changes',{event:'*',schema:'public',table:'messages',filter:'conversation_id=eq.'+active.id},()=>load()).subscribe();
-  return()=>{supabase.removeChannel(ch)};
+  const ch=supabase.channel('trip-chat-'+active.id)
+   .on('postgres_changes',{event:'*',schema:'public',table:'messages',filter:'conversation_id=eq.'+active.id},()=>load())
+   .on('postgres_changes',{event:'INSERT',schema:'public',table:'conversation_call_signals',filter:'conversation_id=eq.'+active.id},payload=>{handleSignal(payload.new).catch(e=>setCallError('تعذر معالجة إشارة المكالمة: '+e.message))})
+   .subscribe();
+  return()=>{supabase.removeChannel(ch);if(callRef.current.conversationId===active.id)cleanupCall()};
  },[active?.id,user?.id]);
+ const startCall=async()=>{
+  if(!active||callRef.current.pc)return;
+  setCallError('');
+  try{
+   if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw new Error('المتصفح لا يدعم المكالمات الصوتية');
+   const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+   const callId=crypto.randomUUID(),pc=await createPeer(active.id,callId,stream);
+   const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+   await sendSignal('offer',{description:pc.localDescription},callId,active.id);
+   setCallState('calling');notify('جارٍ الاتصال بالطرف الآخر…');
+  }catch(e){cleanupCall();setCallError(e.message||'تعذر بدء المكالمة. تحقق من إذن الميكروفون والاتصال الآمن HTTPS.')}
+ };
+ const acceptCall=async()=>{
+  if(!incomingCall)return;
+  try{
+   const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+   const pc=await createPeer(incomingCall.conversationId,incomingCall.callId,stream);
+   await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+   for(const c of pendingIceRef.current.splice(0))await pc.addIceCandidate(new RTCIceCandidate(c));
+   const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
+   await sendSignal('answer',{description:pc.localDescription},incomingCall.callId,incomingCall.conversationId);
+   setIncomingCall(null);setCallState('connecting');setCallError('');
+  }catch(e){cleanupCall();setCallError(e.message||'تعذر قبول المكالمة.')}
+ };
+ const endCall=async()=>{
+  const c=callRef.current;
+  if(c.callId&&c.conversationId)try{await sendSignal('hangup',{},c.callId,c.conversationId)}catch{}
+  cleanupCall();
+ };
+ const toggleMute=()=>{const next=!muted;callRef.current.stream?.getAudioTracks().forEach(t=>t.enabled=!next);setMuted(next)};
  const sendText=async(e)=>{e?.preventDefault();if(!draft.trim()||!active||busy)return;setBusy(true);const r=await supabase.from('messages').insert({conversation_id:active.id,sender_id:user.id,message_type:'text',body:draft.trim()});setBusy(false);if(r.error){notify('تعذر إرسال الرسالة: '+r.error.message);return}setDraft('')};
  const startRecording=async()=>{
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){notify('تسجيل الصوت غير مدعوم في هذا المتصفح');return}
-  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const mr=new MediaRecorder(stream);recorder.current=mr;chunks.current=[];mr.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data)};mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks.current,{type:mr.mimeType||'audio/webm'});if(!blob.size||!active)return;setBusy(true);const mime=(blob.type||'audio/webm').split(';')[0];const ext=(mime.split('/')[1]||'webm');const path=active.id+'/'+crypto.randomUUID()+'.'+ext;const up=await supabase.storage.from('trip-chat-media').upload(path,blob,{contentType:mime,upsert:false});if(up.error){setBusy(false);notify('تعذر رفع التسجيل الصوتي: '+up.error.message);return}const ins=await supabase.from('messages').insert({conversation_id:active.id,sender_id:user.id,message_type:'voice',storage_path:path});setBusy(false);if(ins.error)notify('تم رفع الصوت لكن تعذر حفظ الرسالة: '+ins.error.message);};mr.start();setRecording(true)}catch(err){notify('لم نتمكن من استخدام الميكروفون. تحقق من إذن المتصفح.')}
+  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const mr=new MediaRecorder(stream);recorder.current=mr;chunks.current=[];mr.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data)};mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks.current,{type:mr.mimeType||'audio/webm'});if(!blob.size||!active)return;setBusy(true);const mime=(blob.type||'audio/webm').split(';')[0],ext=(mime.split('/')[1]||'webm'),path=active.id+'/'+crypto.randomUUID()+'.'+ext;const up=await supabase.storage.from('trip-chat-media').upload(path,blob,{contentType:mime,upsert:false});if(up.error){setBusy(false);notify('تعذر رفع التسجيل الصوتي: '+up.error.message);return}const ins=await supabase.from('messages').insert({conversation_id:active.id,sender_id:user.id,message_type:'voice',storage_path:path});setBusy(false);if(ins.error)notify('تم رفع الصوت لكن تعذر حفظ الرسالة: '+ins.error.message)};mr.start();setRecording(true)}catch{notify('لم نتمكن من استخدام الميكروفون. تحقق من إذن المتصفح.')}
  };
  const stopRecording=()=>{if(recorder.current&&recorder.current.state!=='inactive'){recorder.current.stop();setRecording(false)}};
- const titleFor=(c)=>c.kind==='support'?'الدعم الفني – إدارة TRIP':c.kind==='booking_operator'?'شركة النقل · حجز '+(c.booking_id||'').slice(0,8):c.kind==='booking_driver'?'السائق · حجز '+(c.booking_id||'').slice(0,8):'محادثة الشركة والسائق';
+ const titleFor=c=>c.kind==='support'?'الدعم الفني – إدارة TRIP':c.kind==='booking_operator'?'شركة النقل · حجز '+(c.booking_id||'').slice(0,8):c.kind==='booking_driver'?'السائق · حجز '+(c.booking_id||'').slice(0,8):'محادثة الشركة والسائق';
  return <main className="content chatPage" dir="rtl">
   <div className="chatHeading"><div><span className="eyebrow green">مركز التواصل</span><h1>محادثات TRIP</h1><p className="muted">{role==='passenger'?'الدعم متاح دائماً، ومحادثات الشركة والسائق تظهر بعد تأكيد الدفع.':'محادثات الأطراف المصرح بها حسب صلاحيات الحساب.'}</p></div><button className="outline" onClick={loadThreads}>تحديث</button></div>
   {loading?<div className="empty">جارٍ تحميل المحادثات…</div>:<div className="chatShell">
-   <aside className="chatSidebar"><div className="chatSideTitle">المحادثات <span>{threads.length}</span></div>{threads.length?threads.map(c=><button key={c.id} className={'chatThread '+(active?.id===c.id?'active':'')} onClick={()=>setActive(c)}><span className="chatAvatar">{c.kind==='support'?'TR':'↔'}</span><span><b>{titleFor(c)}</b><small>{new Date(c.created_at).toLocaleDateString('ar-SD')}</small></span></button>):<div className="chatEmpty">لا توجد محادثات متاحة لهذا الحساب حالياً.</div>}</aside>
-   <section className="chatConversation">{active?<><div className="chatTop"><div><b>{titleFor(active)}</b><small>{active.kind==='support'?'الراكب ↔ الإدارة فقط':active.kind==='booking_operator'?'الراكب ↔ شركة النقل':active.kind==='booking_driver'?'الراكب ↔ السائق':'الشركة ↔ السائق'}</small></div><button className="callButton" onClick={()=>setCallInfo(true)}><Phone size={17}/> اتصال صوتي</button></div>
+   <aside className="chatSidebar"><div className="chatSideTitle">المحادثات <span>{threads.length}</span></div>{threads.length?threads.map(c=><button key={c.id} className={'chatThread '+(active?.id===c.id?'active':'')} onClick={()=>{if(callRef.current.pc)endCall();setActive(c)}}><span className="chatAvatar">{c.kind==='support'?'TR':'↔'}</span><span><b>{titleFor(c)}</b><small>{new Date(c.created_at).toLocaleDateString('ar-SD')}</small></span></button>):<div className="chatEmpty">لا توجد محادثات متاحة لهذا الحساب حالياً.</div>}</aside>
+   <section className="chatConversation">{active?<><div className="chatTop"><div><b>{titleFor(active)}</b><small>{active.kind==='support'?'الراكب ↔ الإدارة فقط':active.kind==='booking_operator'?'الراكب ↔ شركة النقل':active.kind==='booking_driver'?'الراكب ↔ السائق':'الشركة ↔ السائق'}</small></div><button className="callButton" onClick={startCall} disabled={callState!=='idle'}><Phone size={17}/> اتصال صوتي</button></div>
     <div className="chatMessages">{messages.length?messages.map(m=><MessageBubble key={m.id} message={m} mine={m.sender_id===user.id}/>):<div className="chatBlank"><MessageCircle size={34}/><b>ابدأ المحادثة</b><small>أرسل رسالة إلى الطرف المصرح له في هذه المحادثة.</small></div>}</div>
+    {incomingCall&&<div className="incomingCall"><div><b>مكالمة صوتية واردة</b><small>هناك اتصال وارد من الطرف الآخر</small></div><button className="primary" onClick={acceptCall}>قبول</button><button className="outline" onClick={async()=>{try{await sendSignal('reject',{},incomingCall.callId,incomingCall.conversationId)}catch{}cleanupCall()}}>رفض</button></div>}
+    {callState!=='idle'&&<div className="activeCall"><div><span className="liveDot"></span><b>{callState==='calling'?'جارٍ الاتصال…':callState==='incoming'?'مكالمة واردة':callState==='connecting'?'جارٍ توصيل الصوت…':callState==='active'?'المكالمة متصلة': 'تعذر الاتصال'}</b></div><div className="activeCallActions"><button className="outline" onClick={toggleMute} disabled={!callRef.current.stream}>{muted?'تشغيل الميكروفون':'كتم الميكروفون'}</button><button className="dangerCall" onClick={endCall}>إنهاء المكالمة</button></div></div>}
+    {callError&&<div className="callError">{callError}</div>}
+    <audio ref={remoteAudioRef} autoPlay playsInline/>
     <form className="chatComposer" onSubmit={sendText}><button type="button" className={'voiceButton '+(recording?'recording':'')} disabled={busy} onClick={recording?stopRecording:startRecording} title={recording?'إيقاف التسجيل':'تسجيل رسالة صوتية'}>{recording?<Square size={18}/>:<Mic size={18}/>}</button><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="اكتب رسالتك هنا…" disabled={busy}/><button className="sendButton" disabled={busy||!draft.trim()}><Send size={18}/></button></form>
     {recording&&<div className="recordHint">جارٍ التسجيل… اضغط المربع لإيقاف التسجيل وإرساله</div>}
    </>:<div className="chatBlank"><MessageCircle size={42}/><b>اختر محادثة</b><small>ستظهر الرسائل هنا بشكل مباشر.</small></div>}</section>
   </div>}
-  {callInfo&&<div className="modalShade" onClick={()=>setCallInfo(false)}><div className="tripModal callInfoModal" onClick={e=>e.stopPropagation()}><div className="modalHead"><h2>الاتصال الصوتي</h2><button className="closeModal" onClick={()=>setCallInfo(false)}><X/></button></div><p>واجهة الاتصال جاهزة للتصميم، لكن المكالمات المباشرة تحتاج إعداد خدمة اتصال آمنة وإشارات WebRTC على الخادم. لم نفعّل الاتصال بعد حتى لا يظهر زر يوهم المستخدم بأن المكالمة تعمل.</p><button className="primary full" onClick={()=>setCallInfo(false)}>حسناً</button></div></div>}
  </main>
 }
 function BookingTicketView({booking,session,notify,onBookings}){
