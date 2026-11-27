@@ -16,7 +16,7 @@ function ChatCenter({session,notify}){
  const recorder=React.useRef(null), chunks=React.useRef([]);
  const user=session?.user;
  const loadThreads=async()=>{
-  if(!user||!supabase)return;
+  if(!user||!supabase){setLoading(false);return;}
   setLoading(true);
   const p=await supabase.from('profiles').select('requested_role').eq('id',user.id).maybeSingle();
   const currentRole=user.app_metadata?.role==='admin'?'admin':(p.data?.requested_role||'passenger');
@@ -45,7 +45,7 @@ function ChatCenter({session,notify}){
  const sendText=async(e)=>{e?.preventDefault();if(!draft.trim()||!active||busy)return;setBusy(true);const r=await supabase.from('messages').insert({conversation_id:active.id,sender_id:user.id,message_type:'text',body:draft.trim()});setBusy(false);if(r.error){notify('تعذر إرسال الرسالة: '+r.error.message);return}setDraft('')};
  const startRecording=async()=>{
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){notify('تسجيل الصوت غير مدعوم في هذا المتصفح');return}
-  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const mr=new MediaRecorder(stream);recorder.current=mr;chunks.current=[];mr.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data)};mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks.current,{type:mr.mimeType||'audio/webm'});if(!blob.size||!active)return;setBusy(true);const ext=(blob.type.split('/')[1]||'webm').split(';')[0];const path=active.id+'/'+crypto.randomUUID()+'.'+ext;const up=await supabase.storage.from('trip-chat-media').upload(path,blob,{contentType:blob.type,upsert:false});if(up.error){setBusy(false);notify('تعذر رفع التسجيل الصوتي: '+up.error.message);return}const ins=await supabase.from('messages').insert({conversation_id:active.id,sender_id:user.id,message_type:'voice',storage_path:path});setBusy(false);if(ins.error)notify('تم رفع الصوت لكن تعذر حفظ الرسالة: '+ins.error.message);};mr.start();setRecording(true)}catch(err){notify('لم نتمكن من استخدام الميكروفون. تحقق من إذن المتصفح.')}
+  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const mr=new MediaRecorder(stream);recorder.current=mr;chunks.current=[];mr.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data)};mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks.current,{type:mr.mimeType||'audio/webm'});if(!blob.size||!active)return;setBusy(true);const mime=(blob.type||'audio/webm').split(';')[0];const ext=(mime.split('/')[1]||'webm');const path=active.id+'/'+crypto.randomUUID()+'.'+ext;const up=await supabase.storage.from('trip-chat-media').upload(path,blob,{contentType:mime,upsert:false});if(up.error){setBusy(false);notify('تعذر رفع التسجيل الصوتي: '+up.error.message);return}const ins=await supabase.from('messages').insert({conversation_id:active.id,sender_id:user.id,message_type:'voice',storage_path:path});setBusy(false);if(ins.error)notify('تم رفع الصوت لكن تعذر حفظ الرسالة: '+ins.error.message);};mr.start();setRecording(true)}catch(err){notify('لم نتمكن من استخدام الميكروفون. تحقق من إذن المتصفح.')}
  };
  const stopRecording=()=>{if(recorder.current&&recorder.current.state!=='inactive'){recorder.current.stop();setRecording(false)}};
  const titleFor=(c)=>c.kind==='support'?'الدعم الفني – إدارة TRIP':'محادثة الشركة والسائق';
