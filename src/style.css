@@ -248,3 +248,43 @@ button{min-height:40px}
  .busMotionStage{height:110px}
  .entryAuth{margin-top:10px;padding-block:14px}
 }
+
+
+/* Hard stop for accidental horizontal page overflow on mobile */
+html,body,#root,.app{width:100%;max-width:100%;overflow-x:clip}
+body{position:relative}
+#root,.app{min-width:0}
+main{width:100%;max-width:100%}
+.content,.searchWrap,.section,.hero{min-width:0;max-width:calc(100% - 32px)}
+.content,.searchWrap,.section{margin-left:auto;margin-right:auto}
+@media(max-width:700px){
+ html,body,#root,.app{max-width:100vw}
+ .content,.searchWrap,.section,.hero{width:calc(100% - 24px);max-width:calc(100% - 24px);margin-left:auto;margin-right:auto}
+ .top{width:100%;max-width:100%;padding-inline:14px}
+ .top>*{min-width:0}
+ .top nav{min-width:0;max-width:100%;overflow-x:auto}
+ .hero{padding:22px 16px;grid-template-columns:minmax(0,1fr)}
+ .searchWrap{padding:16px 12px}
+ .searchGrid{width:100%;min-width:0;grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr)}
+ .searchGrid>*{min-width:0}
+ .field,.field select,.field input{min-width:0;max-width:100%}
+ .cityGrid,.metrics,.tripList,.parcelOpsGrid,.supportContactGrid{width:100%;min-width:0;grid-template-columns:minmax(0,1fr)}
+ .trip{width:100%;min-width:0;grid-template-columns:minmax(0,1fr);padding:14px}
+ .trip>*{min-width:0;max-width:100%}
+ .route{width:100%;min-width:0;gap:6px}
+ .route>*{min-width:0}
+ .pageTitle,.sectionHead,.searchTitle,.adminHead,.chatHeading{width:100%;min-width:0;flex-wrap:wrap}
+ .pageTitle>* ,.sectionHead>* ,.adminHead>*{min-width:0;max-width:100%}
+ .adminTabs{max-width:100%;overflow-x:auto;white-space:nowrap}
+ .adminTabs button{flex:0 0 auto}
+ .tableWrap{max-width:100%;overflow-x:auto}
+ .chatShell{width:100%;min-width:0;grid-template-columns:minmax(0,1fr)}
+ .chatSidebar,.chatConversation{width:100%;min-width:0}
+ .chatTop>*{min-width:0;max-width:100%}
+ .chatComposer{width:100%;min-width:0}
+ .modalShade{width:100%;max-width:100vw}
+ .tripModal{width:100%;min-width:0}
+ .entryScreen{width:100%;max-width:100vw}
+ .entryVisual,.entryAuth{width:100%;min-width:0}
+ footer{width:100%;max-width:100%;padding-inline:16px}
+}
