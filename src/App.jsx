@@ -473,7 +473,7 @@ if(awaitingEmailOtp){
  setAwaitingEmailOtp(false);setEmailOtp('');setSession(verified.data.session);notify('تم تأكيد البريد الإلكتروني وتفعيل الحساب');setPage('home');return;
 }
 if(!authEmail.trim()||authPassword.length<8){notify('أدخل البريد وكلمة مرور من 8 أحرف على الأقل');return}
-if(authMode==='signup'&&(!authName.trim()||authName.trim().split(/\\s+/).length<4||!phoneNumber.trim()||!residence.trim())){notify('أدخل الاسم الرباعي ومكان السكن ورقم الهاتف');return}
+if(authMode==='signup'&&(!authName.trim()||authName.trim().split(/\\s+/).length<2||!phoneNumber.trim()||!residence.trim())){notify('أدخل الاسم الكامل (اسمين على الأقل) ومكان السكن ورقم الهاتف');return}
 setAuthBusy(true);let result;try{result=authMode==='signup'?await supabase.auth.signUp({email:authEmail.trim(),password:authPassword,options:{data:{full_name:authName.trim(),phone:phoneNumber.trim(),residence:residence.trim(),requested_role:accountType}}}):await supabase.auth.signInWithPassword({email:authEmail.trim(),password:authPassword})}catch(e){setAuthBusy(false);notify('تعذر الاتصال بخدمة الحسابات: '+(e?.message||'تحقق من الإنترنت وحاول مجدداً'));return}setAuthBusy(false);
 if(result.error){notify(result.error.message);return}
 if(authMode==='signup'&&!result.data.session){setAwaitingEmailOtp(true);notify('أرسلنا رمز تأكيد من 6 أرقام إلى بريدك الإلكتروني.');return}
