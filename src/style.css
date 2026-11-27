@@ -56,3 +56,16 @@
 .supportNote b{color:#245247}
 .footerSupport{background:transparent;color:#a9e9d8;text-decoration:underline;text-underline-offset:4px;font-weight:700;font-size:12px}
 @media(max-width:700px){.supportContactGrid{grid-template-columns:1fr}.supportContactCard{padding:18px}.supportContactCard p{min-height:0}.supportHero{padding:30px 18px}.supportHero h1{font-size:26px}.supportNote{align-items:flex-start}footer{flex-wrap:wrap}}
+
+/* Driver portal, parcel management and live location */
+.driverTrip{display:block;padding:18px;margin-bottom:14px}
+.driverTripHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.driverTripHead>div{display:flex;flex-direction:column;gap:6px}
+.driverTripHead b{font-size:17px;color:#23483e}
+.driverTripHead small{font-size:12px;color:#7b9087}
+.driverTripActions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+.driverTripActions a,.driverTripActions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none}
+.driverLocationStatus{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding:10px 12px;border-radius:12px;background:#edf9f3;color:#287a5d;font-size:12px}
+.driverLocationStatus a{color:#138d76;font-weight:700;text-decoration:underline}
+.liveDot{width:8px;height:8px;background:#23b66d;border-radius:50%;box-shadow:0 0 0 4px #23b66d22}
+@media(max-width:600px){.driverTripHead{flex-direction:column}.driverTripActions>*{flex:1 1 100%}}
