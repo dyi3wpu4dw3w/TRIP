@@ -67,7 +67,7 @@ function ChatCenter({session,notify}){
   <div className="chatHeading"><div><span className="eyebrow green">مركز التواصل</span><h1>محادثات TRIP</h1><p className="muted">{role==='passenger'?'الدعم متاح دائماً، ومحادثات الشركة والسائق تظهر بعد تأكيد الدفع.':'محادثات الأطراف المصرح بها حسب صلاحيات الحساب.'}</p></div><button className="outline" onClick={loadThreads}>تحديث</button></div>
   {loading?<div className="empty">جارٍ تحميل المحادثات…</div>:<div className="chatShell">
    <aside className="chatSidebar"><div className="chatSideTitle">المحادثات <span>{threads.length}</span></div>{threads.length?threads.map(c=><button key={c.id} className={'chatThread '+(active?.id===c.id?'active':'')} onClick={()=>setActive(c)}><span className="chatAvatar">{c.kind==='support'?'TR':'↔'}</span><span><b>{titleFor(c)}</b><small>{new Date(c.created_at).toLocaleDateString('ar-SD')}</small></span></button>):<div className="chatEmpty">لا توجد محادثات متاحة لهذا الحساب حالياً.</div>}</aside>
-   <section className="chatConversation">{active?<><div className="chatTop"><div><b>{titleFor(active)}</b><small>{active.kind==='support'?'الراكب ↔ الإدارة فقط':'الشركة ↔ السائق فقط'}</small></div><button className="callButton" onClick={()=>setCallInfo(true)}><Phone size={17}/> اتصال صوتي</button></div>
+   <section className="chatConversation">{active?<><div className="chatTop"><div><b>{titleFor(active)}</b><small>{active.kind==='support'?'الراكب ↔ الإدارة فقط':active.kind==='booking_operator'?'الراكب ↔ شركة النقل':active.kind==='booking_driver'?'الراكب ↔ السائق':'الشركة ↔ السائق'}</small></div><button className="callButton" onClick={()=>setCallInfo(true)}><Phone size={17}/> اتصال صوتي</button></div>
     <div className="chatMessages">{messages.length?messages.map(m=><MessageBubble key={m.id} message={m} mine={m.sender_id===user.id}/>):<div className="chatBlank"><MessageCircle size={34}/><b>ابدأ المحادثة</b><small>أرسل رسالة إلى الطرف المصرح له في هذه المحادثة.</small></div>}</div>
     <form className="chatComposer" onSubmit={sendText}><button type="button" className={'voiceButton '+(recording?'recording':'')} disabled={busy} onClick={recording?stopRecording:startRecording} title={recording?'إيقاف التسجيل':'تسجيل رسالة صوتية'}>{recording?<Square size={18}/>:<Mic size={18}/>}</button><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="اكتب رسالتك هنا…" disabled={busy}/><button className="sendButton" disabled={busy||!draft.trim()}><Send size={18}/></button></form>
     {recording&&<div className="recordHint">جارٍ التسجيل… اضغط المربع لإيقاف التسجيل وإرساله</div>}
@@ -80,6 +80,7 @@ function BookingTicketView({booking,session,notify,onBookings}){
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true);
  const groupId=booking?.groupId,user=session?.user;
  const load=async()=>{
+  setLoading(true);
   if(!groupId||!user||!supabase){setRows([]);setLoading(false);return}
   const r=await supabase.from('bookings').select('id,booking_code,seat_number,status,amount_sdg,ticket_number,ticket_token,passenger_name,passenger_phone,trips(origin_city,destination_city,departure_at,buses(name,plate_number),operators(name))').eq('booking_group_id',groupId).eq('passenger_id',user.id).order('seat_number');
   if(r.error)notify('تعذر تحميل تفاصيل التذاكر: '+r.error.message);
@@ -96,7 +97,7 @@ function BookingTicketView({booking,session,notify,onBookings}){
  if(loading)return <div className="empty">جارٍ تحميل التذكرة…</div>;
  const issued=rows.length>0&&rows.every(x=>x.status==='confirmed'&&x.ticket_token&&x.ticket_number);
  return <main className="content narrow">
-  <div className={issued?'success':'noticeCard'}>{issued?<CheckCircle2 size={40}/>:<Wallet size={36}/>}<div><h1>{issued?'تم تأكيد الحجز وإصدار التذاكر':'طلب الحجز محفوظ – بانتظار الدفع'}</h1><p>{issued?'احتفظ برمز QR الخاص بكل مقعد، وستتمكن شركة النقل من التحقق منه.':'لم يتم خصم أي مبلغ بعد. لن تصدر التذكرة النهائية أو رموز QR صالحة إلا بعد تأكيد الدفع من مزود الدفع.'}</p></div></div>
+  <div className={issued?'success':'noticeCard'}>{issued?<CheckCircle2 size={40}/>:<Wallet size={36}/>}<div><h1>{issued?'تم تأكيد الحجز وإصدار التذاكر':'طلب الحجز محفوظ – بانتظار الدفع'}</h1><p>{issued?'احتفظ برمز QR الخاص بكل مقعد، وستتمكن شركة النقل من التحقق منه.':'لم يتم خصم أي مبلغ بعد. لن تصدر التذكرة النهائية أو رموز QR صالحة إلا بعد تأكيد الدفع من مزود الدفع.'}</p></div></div><button className="outline full" onClick={load}>تحديث حالة الدفع والتذكرة</button>
   {rows.length?rows.map(row=><article className="ticket issuedTicket" key={row.id}>
    <div className="ticketHead"><div className="brandmark"><Bus/></div><b>تأمين الرحلة · TRIP</b><span>{issued?'تذكرة إلكترونية مؤكدة':'إشعار حجز مبدئي'}</span></div>
    <h2>{row.trips?.origin_city} <ArrowLeftRight/> {row.trips?.destination_city}</h2>
