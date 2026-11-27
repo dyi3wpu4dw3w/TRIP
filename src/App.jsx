@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useState}from'react';
 import { supabase, backendReady } from './lib/supabase.js';
-import{Bus,MapPin,CalendarDays,ArrowLeftRight,Search,Clock,Armchair,Ticket,Package,User,Menu,X,CheckCircle2,ChevronLeft,ShieldCheck,Phone,Wallet,LayoutDashboard,Plus,LogOut,ArrowRight,Star,MessageCircle,Send,Mic,Square,Mail,Facebook,Headphones,ExternalLink,MapPin,Navigation}from'lucide-react';
+import{Bus,MapPin,CalendarDays,ArrowLeftRight,Search,Clock,Armchair,Ticket,Package,User,Menu,X,CheckCircle2,ChevronLeft,ShieldCheck,Phone,Wallet,LayoutDashboard,Plus,LogOut,ArrowRight,Star,MessageCircle,Send,Mic,Square,Mail,Facebook,Headphones,ExternalLink,Navigation}from'lucide-react';
 const stateCities={'ولاية الخرطوم':['الخرطوم','أم درمان','بحري'],'ولاية الجزيرة':['مدني','الحصاحيصا','المناقل'],'ولاية البحر الأحمر':['بورتسودان'],'ولاية كسلا':['كسلا'],'ولاية القضارف':['القضارف'],'ولاية نهر النيل':['عطبرة','الدامر','شندي'],'الولاية الشمالية':['دنقلا','مروي'],'ولاية النيل الأبيض':['كوستي','ربك'],'ولاية سنار':['سنار'],'ولاية النيل الأزرق':['الدمازين'],'ولاية شمال كردفان':['الأبيض'],'ولاية جنوب كردفان':['كادقلي'],'ولاية غرب كردفان':['الفولة'],'ولاية شمال دارفور':['الفاشر'],'ولاية جنوب دارفور':['نيالا'],'ولاية غرب دارفور':['الجنينة'],'ولاية وسط دارفور':['زالنجي'],'ولاية شرق دارفور':['الضعين']};
 const states=Object.keys(stateCities);
 const cities=[...new Set(Object.values(stateCities).flat())];
