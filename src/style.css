@@ -31,3 +31,28 @@
 .paymentMethod img{display:block;width:min(100%,190px);aspect-ratio:1;object-fit:contain;background:#fff;border-radius:8px;padding:5px}
 .paymentMethod span{font-size:.86rem;line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:680px){.paymentMethods{grid-template-columns:1fr}.paymentMethod{display:grid;grid-template-columns:1fr;justify-items:center}.paymentMethod img{width:min(72vw,240px)}}
+
+/* YOSHA unified customer support */
+.supportPage{padding-top:18px;padding-bottom:20px}
+.supportHero{position:relative;overflow:hidden;text-align:center;background:linear-gradient(120deg,#073f37,#0b806c);color:#fff;border-radius:24px;padding:38px 24px;margin:15px 0 22px}
+.supportHero:after{content:'';position:absolute;width:230px;height:230px;border:1px solid #ffffff20;border-radius:50%;left:-65px;top:-125px;box-shadow:0 0 0 28px #ffffff08,0 0 0 58px #ffffff06}
+.supportHeroIcon{width:65px;height:65px;border-radius:20px;background:#ffffff1c;color:#9af0d9;display:grid;place-items:center;margin:0 auto 14px}
+.supportHero .eyebrow{color:#9af0d9}
+.supportHero h1{font-size:32px;margin:9px 0}
+.supportHero p{max-width:570px;margin:0 auto;color:#d0eee5;line-height:1.9;font-size:14px}
+.supportAvailability{display:inline-flex;align-items:center;gap:8px;margin-top:18px;padding:8px 13px;border:1px solid #ffffff35;border-radius:30px;color:#e1fff5;font-size:12px}
+.supportAvailability span{width:8px;height:8px;border-radius:50%;background:#65e2a7;box-shadow:0 0 0 4px #65e2a722}
+.supportContactGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.supportContactCard{background:#fff;border:1px solid #e5efea;border-radius:18px;padding:23px 20px;display:flex;flex-direction:column;align-items:flex-start;min-width:0;box-shadow:0 8px 25px #174c3b08}
+.supportContactIcon{width:48px;height:48px;border-radius:15px;background:#eaf8f3;color:#15977d;display:grid;place-items:center}
+.supportContactCard h2{font-size:18px;margin:17px 0 5px;color:#23483e}
+.supportValue{font-size:14px;color:#138d76;overflow-wrap:anywhere}
+.supportContactCard p{font-size:12px;line-height:1.8;color:#81938b;min-height:44px;margin:10px 0 18px}
+.supportAction{width:100%;margin-top:auto;text-decoration:none;font-size:12px}
+.supportContactCard.whatsapp .supportContactIcon{background:#e8f8ed;color:#199b59}
+.supportContactCard.facebook .supportContactIcon{background:#edf2ff;color:#2864ce}
+.supportNote{display:flex;align-items:center;gap:12px;background:#eff9f5;border:1px solid #dcefe7;border-radius:14px;padding:15px 18px;margin-top:18px;color:#15977d}
+.supportNote p{margin:0;color:#6f857b;font-size:12px;line-height:1.8}
+.supportNote b{color:#245247}
+.footerSupport{background:transparent;color:#a9e9d8;text-decoration:underline;text-underline-offset:4px;font-weight:700;font-size:12px}
+@media(max-width:700px){.supportContactGrid{grid-template-columns:1fr}.supportContactCard{padding:18px}.supportContactCard p{min-height:0}.supportHero{padding:30px 18px}.supportHero h1{font-size:26px}.supportNote{align-items:flex-start}footer{flex-wrap:wrap}}
