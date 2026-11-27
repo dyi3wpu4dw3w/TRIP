@@ -113,7 +113,7 @@ function PassengerTripTracking({session,notify}){
  const user=session?.user;
  const load=async()=>{
   if(!user||!supabase){setItems([]);setLoading(false);return}
-  const b=await supabase.from('bookings').select('id,booking_code,trip_id,booking_group_id,seat_number,trips(origin_city,destination_city,departure_at)').eq('passenger_id',user.id).eq('status','confirmed');
+  const b=await supabase.from('bookings').select('id,booking_code,trip_id,booking_group_id,seat_number,trips(origin_city,destination_city,departure_at,status)').eq('passenger_id',user.id).eq('status','confirmed');
   if(b.error){setLoading(false);notify('تعذر تحميل الرحلات المؤكدة للتتبع');return}
   if(!b.data?.length){setItems([]);setLoading(false);return}
   const ids=b.data.map(x=>x.id),tripIds=[...new Set(b.data.map(x=>x.trip_id))];
@@ -127,7 +127,7 @@ function PassengerTripTracking({session,notify}){
  useEffect(()=>{load();if(!user)return;const ch=supabase.channel('passenger-live-trip-locations').on('postgres_changes',{event:'*',schema:'public',table:'driver_trip_locations'},()=>load()).subscribe();return()=>{supabase.removeChannel(ch)}},[user?.id]);
  if(!user)return null;
  return <section className="section"><div className="sectionHead"><div><h2>تتبع رحلاتك المؤكدة</h2><p className="muted">يظهر موقع الباص بعد تأكيد الدفع وبدء السائق مشاركة موقعه.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
- {loading?<div className="empty">جارٍ التحقق من الرحلات…</div>:items.length?<div className="tripList">{items.map(item=><article className="trip" key={item.tripId}><div><b>{item.booking?.trips?.origin_city} ← {item.booking?.trips?.destination_city}</b><small>التذكرة: {item.booking?.booking_code} · المقعد {item.booking?.seat_number}</small>{item.location?<><small>آخر تحديث للموقع: {new Date(item.location.updated_at).toLocaleString('ar-SD')}</small><a className="primary supportAction" href={'https://www.google.com/maps?q='+item.location.latitude+','+item.location.longitude} target="_blank" rel="noreferrer"><MapPin size={16}/> عرض موقع الباص على الخريطة</a></>:<small className="muted">لم يبدأ السائق مشاركة الموقع بعد.</small>}</div><span className="status">دفع مؤكد</span></article>)}</div>:<div className="empty">لا توجد رحلات مدفوعة ومؤكدة قابلة للتتبع حالياً.</div>}
+ {loading?<div className="empty">جارٍ التحقق من الرحلات…</div>:items.length?<div className="tripList">{items.map(item=><article className="trip" key={item.tripId}><div><b>{item.booking?.trips?.origin_city} ← {item.booking?.trips?.destination_city}</b><small>التذكرة: {item.booking?.booking_code} · المقعد {item.booking?.seat_number}</small>{item.location&&['boarding','departed'].includes(item.booking?.trips?.status)?<><small>آخر تحديث للموقع: {new Date(item.location.updated_at).toLocaleString('ar-SD')}</small><a className="primary supportAction" href={'https://www.google.com/maps?q='+item.location.latitude+','+item.location.longitude} target="_blank" rel="noreferrer"><MapPin size={16}/> عرض موقع الباص على الخريطة</a></>:<small className="muted">{item.booking?.trips?.status==='completed'?'انتهت الرحلة وتم إيقاف مشاركة الموقع.':'لم يبدأ السائق مشاركة الموقع بعد.'}</small>}</div><span className="status">دفع مؤكد</span></article>)}</div>:<div className="empty">لا توجد رحلات مدفوعة ومؤكدة قابلة للتتبع حالياً.</div>}
  </section>
 }
 function DriverDashboard({session,notify}){
