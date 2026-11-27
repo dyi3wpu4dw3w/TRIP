@@ -1,0 +1,19 @@
+{
+  "name": "تأمين الرحلة",
+  "short_name": "TRIP",
+  "description": "احجز رحلتك بين مدن السودان بسهولة",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6faf8",
+  "theme_color": "#18b99a",
+  "icons": [
+    {
+      "src": "/trip-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
