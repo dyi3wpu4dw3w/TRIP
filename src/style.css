@@ -78,3 +78,48 @@
 .realQr svg{max-width:100%;height:auto}
 .realQr small,.pendingQr b{font-size:12px;color:#58776a}
 .pendingQr{flex-direction:row;color:#8b7a4c;background:#fffaf0;border-color:#e9d9ad}
+
+/* Voice call controls */
+.incomingCall,.activeCall{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 15px;background:#effaf5;border-top:1px solid #dcefe7}
+.incomingCall>div{display:flex;flex-direction:column;gap:4px;flex:1}
+.incomingCall small{font-size:11px;color:#71877e}
+.activeCall{justify-content:space-between;background:#f4faf7}
+.activeCall>div:first-child{display:flex;align-items:center;gap:9px;color:#287a5d}
+.activeCallActions{display:flex;gap:8px;flex-wrap:wrap}
+.dangerCall{background:#d94b4b;color:#fff;border-radius:10px;padding:10px 14px;font-weight:700}
+.callError{padding:10px 14px;color:#a13c3c;background:#fff0f0;font-size:12px;line-height:1.7}
+.chatConversation audio[autoplay]{display:none}
+.callButton:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:600px){.activeCall{align-items:flex-start;flex-direction:column}.activeCallActions{width:100%}.activeCallActions>*{flex:1}.incomingCall>*{flex:1}}
+/* Parcel operations and shipment progress */
+.parcelOpsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.parcelOpsCard{background:#fff;border:1px solid #e4eee9;border-radius:17px;padding:17px;min-width:0;box-shadow:0 8px 24px #174c3b08}
+.parcelCardTop{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.parcelCardTop>div{display:flex;flex-direction:column;gap:5px}
+.parcelCardTop>div>b{font-size:15px;letter-spacing:.4px;color:#147e6b;overflow-wrap:anywhere}
+.parcelStatus{display:inline-flex;align-items:center;border-radius:30px;padding:6px 10px;background:#eaf8f3;color:#16856e;font-size:11px;font-weight:800;white-space:nowrap}
+.parcelRoute{display:flex;align-items:center;gap:11px;padding:14px 0;border-bottom:1px solid #edf2ef}
+.parcelRoute>svg{color:#15977d;flex:none}
+.parcelRoute>div{display:flex;flex-direction:column;gap:4px}
+.parcelRoute b{color:#244a40}
+.parcelRoute small{color:#82948c;font-size:11px}
+.parcelProgress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:15px 0 12px}
+.parcelStep{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:0}
+.parcelStep span{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#edf2ef;color:#82948c;font-size:11px;font-weight:800}
+.parcelStep.done span{background:#18b99a;color:white}
+.parcelStep small{font-size:9px;line-height:1.4;color:#81938b}
+.parcelStep.done small{color:#16856e;font-weight:700}
+.parcelCancelled{padding:10px;background:#fff1f1;color:#b74444;border-radius:10px;font-size:12px;text-align:center;margin:12px 0}
+.parcelPeople{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 0}
+.parcelPeople>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.parcelPeople small{font-size:10px;color:#82948c}
+.parcelPeople b{font-size:12px;color:#2a4b42}
+.parcelPeople a{font-size:11px;color:#16856e;text-decoration:none}
+.parcelOpsFields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.parcelOpsFields label{display:flex;flex-direction:column;gap:5px;color:#71877e;font-size:11px;font-weight:700}
+.parcelOpsFields label select,.parcelOpsFields label input{width:100%;min-width:0;height:40px;border:1px solid #e1ebe6;border-radius:9px;padding:0 9px;background:#fff;color:#294a40}
+.parcelOpsFields label:last-child:nth-child(3){grid-column:1/-1}
+.parcelCardFoot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid #edf2ef}
+.parcelCardFoot small{font-size:9px;color:#91a199}
+.parcelOps .sectionHead{margin-bottom:16px}
+@media(max-width:720px){.parcelOpsGrid{grid-template-columns:1fr}.parcelOpsFields{grid-template-columns:1fr}.parcelOpsFields label:last-child:nth-child(3){grid-column:auto}.parcelPeople{grid-template-columns:1fr 1fr}}
