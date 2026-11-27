@@ -35,6 +35,7 @@ begin
 end;
 $$;
 revoke all on function public.prepare_trip_booking() from public, anon, authenticated;
+drop trigger if exists prepare_trip_booking_before_insert on public.bookings;
 create trigger prepare_trip_booking_before_insert
 before insert on public.bookings
 for each row execute procedure public.prepare_trip_booking();
