@@ -28,6 +28,19 @@ function ChatCenter({session,notify}){
     if(!made.error)q={data:[made.data],error:null};
    }
    setThreads(q.data||[]);
+  }else if(currentRole==='operator'){
+   const ops=await supabase.from('operators').select('id').eq('owner_id',user.id).eq('verified',true);
+   if(!ops.error&&ops.data?.length){
+    for(const op of ops.data){
+     const links=await supabase.from('operator_drivers').select('driver_id').eq('operator_id',op.id);
+     for(const link of (links.data||[])){
+      const exists=await supabase.from('conversations').select('id').eq('kind','operator_driver').eq('operator_id',op.id).eq('operator_user_id',user.id).eq('driver_user_id',link.driver_id).maybeSingle();
+      if(!exists.data) await supabase.from('conversations').insert({kind:'operator_driver',operator_id:op.id,operator_user_id:user.id,driver_user_id:link.driver_id});
+     }
+    }
+   }
+   const q=await supabase.from('conversations').select('*').order('created_at',{ascending:false});
+   setThreads(q.data||[]);
   }else{
    const q=await supabase.from('conversations').select('*').order('created_at',{ascending:false});
    setThreads(q.data||[]);
