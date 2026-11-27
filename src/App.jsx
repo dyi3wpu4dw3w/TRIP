@@ -178,7 +178,7 @@ function TicketVerification({notify}){
  const [token,setToken]=useState(''),[result,setResult]=useState(null),[busy,setBusy]=useState(false);
  const verify=async()=>{
   const value=token.trim().replace(/^TRIP:TICKET:/i,'');
-  if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value)){notify('أدخل رمز QR الصحيح أو الصق محتواه بعد مسحه');return}
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)){notify('أدخل رمز QR الصحيح أو الصق محتواه بعد مسحه');return}
   setBusy(true);const r=await supabase.rpc('verify_trip_ticket',{p_ticket_token:value});setBusy(false);
   if(r.error){notify('تعذر التحقق من التذكرة: '+r.error.message);setResult(null);return}
   setResult(r.data?.[0]||null);
