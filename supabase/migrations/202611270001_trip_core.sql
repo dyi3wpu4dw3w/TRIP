@@ -56,8 +56,8 @@ create table public.bookings (
  status public.booking_status not null default 'pending',
  amount_sdg numeric(14,2) not null check(amount_sdg >= 0),
  created_at timestamptz not null default now(),
- unique(trip_id,seat_number)
-);
+ );
+create unique index bookings_active_seat_unique on public.bookings(trip_id,seat_number) where status in ('pending','confirmed');
 create table public.payments (
  id uuid primary key default gen_random_uuid(),
  booking_id uuid not null unique references public.bookings(id),
@@ -82,11 +82,12 @@ create table public.parcels (
  created_at timestamptz not null default now()
 );
 
-create function public.handle_new_user() returns trigger language plpgsql security invoker set search_path = '' as $$
+create function public.handle_new_user() returns trigger language plpgsql security definer set search_path = '' as $
 begin
  insert into public.profiles(id,full_name) values(new.id,coalesce(new.raw_user_meta_data->>'full_name',''));
  return new;
-end; $$;
+end; $;
+revoke all on function public.handle_new_user() from public, anon, authenticated;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 
 create function public.create_trip_booking(p_trip_id uuid,p_seat_number integer,p_passenger_name text,p_passenger_phone text)
