@@ -19,14 +19,14 @@ function ChatCenter({session,notify}){
  const [callState,setCallState]=useState('idle'),[incomingCall,setIncomingCall]=useState(null),[muted,setMuted]=useState(false),[callError,setCallError]=useState('');
  const recorder=React.useRef(null),chunks=React.useRef([]),remoteAudioRef=React.useRef(null);
  const callRef=React.useRef({pc:null,stream:null,callId:null,conversationId:null});
- const pendingIceRef=React.useRef([]);
+ const pendingIceRef=React.useRef([]),incomingCallRef=React.useRef(null);
  const user=session?.user;
  const cleanupCall=()=>{
   const c=callRef.current;
   try{c.pc?.getSenders?.().forEach(s=>s.track?.stop());c.pc?.close()}catch{}
   c.stream?.getTracks?.().forEach(t=>t.stop());
   callRef.current={pc:null,stream:null,callId:null,conversationId:null};
-  pendingIceRef.current=[];setIncomingCall(null);setCallState('idle');setMuted(false);
+  pendingIceRef.current=[];incomingCallRef.current=null;setIncomingCall(null);setCallState('idle');setMuted(false);
   if(remoteAudioRef.current)remoteAudioRef.current.srcObject=null;
  };
  const sendSignal=async(type,payload={},callId=callRef.current.callId,conversationId=callRef.current.conversationId)=>{
@@ -47,8 +47,8 @@ function ChatCenter({session,notify}){
   if(!s||s.sender_id===user?.id||s.conversation_id!==active?.id)return;
   const current=callRef.current;
   if(s.signal_type==='offer'){
-   if(current.pc||incomingCall)return;
-   setIncomingCall({callId:s.call_id,conversationId:s.conversation_id,offer:s.payload?.description||s.payload});
+   if(current.pc||incomingCallRef.current)return;
+   const incoming={callId:s.call_id,conversationId:s.conversation_id,offer:s.payload?.description||s.payload};incomingCallRef.current=incoming;setIncomingCall(incoming);
    setCallState('incoming');return;
   }
   if(s.signal_type==='ice'){
@@ -62,7 +62,7 @@ function ChatCenter({session,notify}){
    try{await current.pc.setRemoteDescription(new RTCSessionDescription(s.payload?.description||s.payload));for(const c of pendingIceRef.current.splice(0))await current.pc.addIceCandidate(new RTCIceCandidate(c));setCallState('connecting')}catch(e){setCallError('تعذر إكمال الاتصال: '+e.message)}
    return;
   }
-  if((s.signal_type==='hangup'||s.signal_type==='reject')&&(current.callId===s.call_id||incomingCall?.callId===s.call_id)){cleanupCall();notify(s.signal_type==='reject'?'تم رفض المكالمة.':'انتهت المكالمة.')}
+  if((s.signal_type==='hangup'||s.signal_type==='reject')&&(current.callId===s.call_id||incomingCallRef.current?.callId===s.call_id)){cleanupCall();notify(s.signal_type==='reject'?'تم رفض المكالمة.':'انتهت المكالمة.')}
  };
  const loadThreads=async()=>{
   if(!user||!supabase){setLoading(false);return}
