@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useState}from'react';
 import { supabase, backendReady } from './lib/supabase.js';
-import{Bus,MapPin,CalendarDays,ArrowLeftRight,Search,Clock,Armchair,Ticket,Package,User,Menu,X,CheckCircle2,ChevronLeft,ShieldCheck,Phone,Wallet,LayoutDashboard,Plus,LogOut,ArrowRight,Star}from'lucide-react';
+import{Bus,MapPin,CalendarDays,ArrowLeftRight,Search,Clock,Armchair,Ticket,Package,User,Menu,X,CheckCircle2,ChevronLeft,ShieldCheck,Phone,Wallet,LayoutDashboard,Plus,LogOut,ArrowRight,Star,MessageCircle,Send,Mic,Square}from'lucide-react';
 const cities=['الخرطوم','بورتسودان','مدني','كسلا','عطبرة','القضارف','الأبيض','سنار','دنقلا','كوستي'];
 const initialTrips=[
 {id:1,company:'شركة النيل الأزرق',from:'الخرطوم',to:'بورتسودان',time:'06:30 ص',arrival:'04:30 م',date:'2026-11-29',price:85000,seats:12,totalSeats:28,bus:'باص سياحي VIP',rating:4.8},
