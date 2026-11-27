@@ -174,3 +174,77 @@
 .entryScreen .roleChoice{background:#fff;color:#284b41}.entryScreen .roleChoice.selected{border-color:#18b99a;background:#effaf6}
 @media(max-width:700px){.entryScreen{padding:19px 16px 15px}.entryBrand{margin-bottom:16px}.entryBrandIcon{width:42px;height:42px}.entryVisual{grid-template-columns:1fr;padding:24px 22px 15px;min-height:0;border-radius:22px}.entryCopy{text-align:center}.entryCopy h1{font-size:35px;margin:10px 0}.entryCopy p{font-size:12px;margin:auto}.entryFeatures{justify-content:center;gap:11px;margin-top:13px}.entryFeatures span{font-size:9px}.busMotionStage{height:185px;margin-top:8px}.movingCoach{width:min(100%,430px);height:120px;top:28px}.movingCoach:before{height:45px;top:10px}.coachWindows{top:19px;height:29px}.coachFront{top:27px;height:49px}.coachWheel{width:38px;height:38px;bottom:-13px}.coachStripe{bottom:25px}.coachLight{bottom:32px}.roadTrack{bottom:20px}.entryAuth{margin-top:16px;padding:21px 18px;border-radius:19px}.entryAuthHeading h2{font-size:22px}.entryRoles{grid-template-columns:repeat(3,1fr)}.entryRoles .roleChoice{display:grid;grid-template-columns:1fr;text-align:center;justify-items:center}.entryFooter{margin-top:13px}}
 @media(prefers-reduced-motion:reduce){.entryScreen *{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+
+
+/* Responsive phone layout refinements */
+*,*::before,*::after{box-sizing:border-box}
+html{width:100%;min-width:320px;overflow-x:hidden;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body,#root{width:100%;min-height:100%;margin:0;overflow-x:hidden}
+img,svg,video,canvas{max-width:100%}
+button,input,select,textarea{font:inherit;max-width:100%}
+input,select,textarea{min-width:0}
+main,.content,.entryScreen{min-width:0;max-width:100%}
+.content{width:min(100% - 32px,1120px);margin-inline:auto}
+.trip,.card,.panel,.section,.entryAuth,.chatShell,.chatSidebar,.chatConversation,.parcelOpsCard,.supportContactCard{min-width:0}
+.tableWrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{min-width:620px}
+button,a{touch-action:manipulation}
+button{min-height:40px}
+@media(max-width:700px){
+ .content{width:calc(100% - 28px);padding-inline:0}
+ .entryScreen{min-height:100svh;padding:14px 12px calc(18px + env(safe-area-inset-bottom))}
+ .entryBrand{margin-bottom:14px;gap:9px}
+ .entryVisual{grid-template-columns:minmax(0,1fr);padding:18px 14px 10px;border-radius:18px}
+ .entryCopy h1{font-size:clamp(27px,8vw,35px)}
+ .entryCopy p{font-size:12px;line-height:1.8}
+ .busMotionStage{height:150px;min-width:0;overflow:hidden}
+ .movingCoach{width:min(92%,390px)}
+ .entryAuth{width:100%;max-width:500px;margin:13px auto 0;padding:18px 15px;border-radius:17px}
+ .entryForm{gap:10px}
+ .entryForm input{height:44px;font-size:16px}
+ .entrySubmit{min-height:46px}
+ .entryRoles{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .entryRoles .roleChoice{min-width:0;padding:9px 3px}
+ .entryRoles .roleChoice b{font-size:10px}
+ .entryRoles .roleChoice small{font-size:9px}
+ .entryFooter{line-height:1.8;padding-bottom:env(safe-area-inset-bottom)}
+ .pageTitle,.sectionHead,.chatHeading,.driverTripHead,.parcelCardTop{gap:10px;flex-wrap:wrap}
+ .pageTitle{align-items:flex-start}
+ .pageTitle>div{min-width:0;max-width:100%}
+ .searchGrid,.parcelOpsFields{grid-template-columns:minmax(0,1fr)}
+ .searchGrid>*{grid-column:1/-1!important}
+ .cityGrid,.supportContactGrid,.parcelOpsGrid{grid-template-columns:minmax(0,1fr)}
+ .tripList{gap:12px}
+ .trip{padding:14px}
+ .chatShell{grid-template-columns:minmax(0,1fr);height:auto;min-height:0}
+ .chatSidebar{max-height:230px;overflow:auto}
+ .chatConversation{min-height:420px}
+ .chatTop,.chatComposer{gap:8px;flex-wrap:wrap}
+ .chatComposer input{flex:1 1 160px;min-width:0}
+ .chatComposer button{flex:0 0 auto}
+ .parcelPeople{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .paymentMethods{grid-template-columns:minmax(0,1fr)}
+ .paymentMethod img{width:min(65vw,220px)}
+ .supportHero{padding:25px 14px}
+ .supportHero h1{font-size:clamp(22px,6vw,28px)}
+ .driverTripActions>*{flex:1 1 100%;min-width:0}
+ .activeCallActions{width:100%}
+ .activeCallActions>*{flex:1 1 0;min-width:0}
+}
+@media(max-width:380px){
+ .content{width:calc(100% - 22px)}
+ .entryScreen{padding-inline:9px}
+ .entryAuth{padding:16px 12px}
+ .entryRoles{gap:5px}
+ .entryRoles .roleChoice span{font-size:18px}
+ .entryRoles .roleChoice b{font-size:9px}
+ .entryFeatures{gap:7px}
+ .entryFeatures span{font-size:8px}
+ .parcelPeople{grid-template-columns:minmax(0,1fr)}
+}
+@media(orientation:landscape) and (max-height:520px){
+ .entryScreen{padding-top:10px}
+ .entryVisual{min-height:0;padding-block:12px}
+ .busMotionStage{height:110px}
+ .entryAuth{margin-top:10px;padding-block:14px}
+}
