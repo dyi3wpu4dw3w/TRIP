@@ -31,6 +31,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
       - name: Install dependencies
         run: npm install
 
@@ -39,6 +44,39 @@ jobs:
 
       - name: Generate Android project
         run: npx cap add android
+
+      - name: Apply full-image TRIP launcher icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_URL="https://raw.githubusercontent.com/dyi3wpu4dw3w/TRIP/main/public/file_00000000fee8824688a729099aac715b.png"
+          curl --fail --location --retry 3 "$SOURCE_URL" --output /tmp/trip-source.png
+          identify /tmp/trip-source.png
+          RES="android/app/src/main/res"
+          for spec in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
+            density="${spec%%:*}"
+            size="${spec##*:}"
+            mkdir -p "$RES/mipmap-$density"
+            # Legacy launcher icon: fit the complete source image without cropping.
+            magick /tmp/trip-source.png -auto-orient -resize "${size}x${size}" -background '#18b99a' -gravity center -extent "${size}x${size}" "$RES/mipmap-$density/ic_launcher.png"
+            # Adaptive foreground: keep the full image inside the Android safe zone.
+            fg=$((size * 66 / 100))
+            magick /tmp/trip-source.png -auto-orient -resize "${fg}x${fg}" -background none -gravity center -extent "${size}x${size}" "$RES/mipmap-$density/ic_launcher_foreground.png"
+          done
+          mkdir -p "$RES/mipmap-anydpi-v26" "$RES/values"
+          cat > "$RES/mipmap-anydpi-v26/ic_launcher.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background"/>
+              <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+          </adaptive-icon>
+          EOF
+          cat > "$RES/values/ic_launcher_background.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="ic_launcher_background">#18B99A</color>
+          </resources>
+          EOF
 
       - name: Sync web assets to Android
         run: npx cap sync android
