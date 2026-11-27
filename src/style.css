@@ -123,3 +123,5 @@
 .parcelCardFoot small{font-size:9px;color:#91a199}
 .parcelOps .sectionHead{margin-bottom:16px}
 @media(max-width:720px){.parcelOpsGrid{grid-template-columns:1fr}.parcelOpsFields{grid-template-columns:1fr}.parcelOpsFields label:last-child:nth-child(3){grid-column:auto}.parcelPeople{grid-template-columns:1fr 1fr}}
+
+.callHint{padding:5px 12px;color:#84958e;font-size:10px;text-align:center;background:#fbfdfc}
