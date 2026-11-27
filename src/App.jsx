@@ -257,12 +257,18 @@ function TicketVerification({notify}){
  {result?<div className="ticketCheckSuccess"><b><ShieldCheck size={18}/> تذكرة صحيحة ومؤكدة</b><p>رقم التذكرة: {result.ticket_number} · رقم الحجز: {result.booking_code}</p><p>الراكب: {result.passenger_name} · المقعد: {result.seat_number}</p><p>{result.origin_city} ← {result.destination_city}</p><p>المغادرة: {new Date(result.departure_at).toLocaleString('ar-SD')}</p></div>:null}
  </section>
 }
+const parcelStatuses=[['pending','بانتظار المراجعة'],['accepted','تم قبول الطلب'],['picked_up','تم استلام الطرد'],['in_transit','في الطريق'],['delivered','تم التسليم'],['cancelled','ملغي']];
+const parcelLabel=status=>parcelStatuses.find(x=>x[0]===status)?.[1]||'قيد المراجعة';
+function ParcelProgress({status}){
+ const steps=parcelStatuses.slice(1,5),index=steps.findIndex(x=>x[0]===status);
+ if(status==='cancelled')return <div className="parcelCancelled">تم إلغاء طلب الشحن</div>;
+ return <div className="parcelProgress" dir="rtl">{steps.map(([key,label],i)=><div className={'parcelStep '+(i<=(index<0?-1:index)?'done':'')} key={key}><span>{i<=(index<0?-1:index)?'✓':i+1}</span><small>{label}</small></div>)}</div>;
+}
 function ParcelOperations({operatorId=null,isAdmin=false,notify}){
  const [rows,setRows]=useState([]),[companies,setCompanies]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState('');
- const statuses=[['pending','بانتظار المراجعة'],['accepted','تم قبول الطلب'],['picked_up','تم استلام الطرد'],['in_transit','في الطريق'],['delivered','تم التسليم'],['cancelled','ملغي']];
  const load=async()=>{
   setLoading(true);
-  let q=supabase.from('parcels').select('id,tracking_code,sender_name,sender_phone,receiver_name,receiver_phone,origin_city,destination_city,description,status,operator_id,price_sdg,created_at,operators(name)').order('created_at',{ascending:false});
+  let q=supabase.from('parcels').select('id,tracking_code,sender_name,sender_phone,receiver_name,receiver_phone,origin_city,destination_city,description,status,operator_id,price_sdg,created_at,updated_at,operators(name)').order('created_at',{ascending:false});
   if(operatorId)q=q.eq('operator_id',operatorId);
   const [p,o]=await Promise.all([q,isAdmin?supabase.from('operators').select('id,name').order('name'):Promise.resolve({data:[],error:null})]);
   if(p.error)notify('تعذر تحميل طلبات الطرود: '+p.error.message);
@@ -274,8 +280,19 @@ function ParcelOperations({operatorId=null,isAdmin=false,notify}){
   if(r.error){notify('تعذر تحديث طلب الشحن: '+r.error.message);return}
   notify('تم تحديث طلب الشحن');load();
  };
- return <section><div className="sectionHead"><div><h2>{isAdmin?'إدارة شحن الطرود':'طلبات الطرود التابعة للشركة'}</h2><p className="muted">متابعة رقم التتبع وحالة الاستلام والتوصيل.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
- {loading?<div className="empty">جارٍ تحميل الطلبات…</div>:rows.length?<div className="tableWrap"><table><thead><tr><th>رقم التتبع</th><th>المسار</th><th>المرسل / المستلم</th><th>الشركة</th><th>الحالة</th><th>قيمة الشحن</th><th>إجراء</th></tr></thead><tbody>{rows.map(p=><tr key={p.id}><td><b>{p.tracking_code||p.id.slice(0,8)}</b><small>{new Date(p.created_at).toLocaleDateString('ar-SD')}</small></td><td>{p.origin_city} ← {p.destination_city}<small>{p.description||'—'}</small></td><td>{p.sender_name}<small>{p.sender_phone}</small><small>إلى: {p.receiver_name} · {p.receiver_phone}</small></td><td>{p.operators?.name||'غير مسندة'}</td><td><select value={p.status||'pending'} disabled={busy===p.id} onChange={e=>updateParcel(p,{status:e.target.value})}>{statuses.map(([v,l])=><option value={v} key={v}>{l}</option>)}</select></td><td><input type="number" min="0" defaultValue={p.price_sdg||''} placeholder="سعر الشحن" disabled={busy===p.id} onBlur={e=>{const value=e.target.value;if(value!==''&&Number(value)>=0&&Number(value)!==Number(p.price_sdg||0))updateParcel(p,{price_sdg:Number(value)});}}/></td><td>{isAdmin?<select value={p.operator_id||''} disabled={busy===p.id} onChange={e=>updateParcel(p,{operator_id:e.target.value||null})}><option value="">إسناد لشركة</option>{companies.map(o=><option value={o.id} key={o.id}>{o.name}</option>)}</select>:<span className="muted">تحديث الحالة</span>}</td></tr>)}</tbody></table></div>:<div className="empty"><Package size={36}/><h3>لا توجد طلبات شحن</h3><p>{isAdmin?'ستظهر طلبات الركاب هنا لتعيين شركة النقل ومتابعة التنفيذ.':'ستظهر الطلبات التي أسندتها إدارة المنصة إلى شركتك.'}</p></div>}
+ return <section className="parcelOps"><div className="sectionHead"><div><h2>{isAdmin?'إدارة شحن الطرود':'طلبات الطرود التابعة للشركة'}</h2><p className="muted">إسناد الشركات، تسعير الشحن، وتحديث مراحل الاستلام والتوصيل.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
+ {loading?<div className="empty">جارٍ تحميل الطلبات…</div>:rows.length?<div className="parcelOpsGrid">{rows.map(p=><article className="parcelOpsCard" key={p.id}>
+  <div className="parcelCardTop"><div><span className="eyebrow green">رقم التتبع</span><b>{p.tracking_code||p.id.slice(0,8).toUpperCase()}</b></div><span className="parcelStatus">{parcelLabel(p.status)}</span></div>
+  <div className="parcelRoute"><Package/><div><b>{p.origin_city} ← {p.destination_city}</b><small>{p.description||'لا يوجد وصف إضافي للطرد'}</small></div></div>
+  <ParcelProgress status={p.status||'pending'}/>
+  <div className="parcelPeople"><div><small>المرسل</small><b>{p.sender_name}</b><a href={'tel:'+p.sender_phone}>{p.sender_phone}</a></div><div><small>المستلم</small><b>{p.receiver_name}</b><a href={'tel:'+p.receiver_phone}>{p.receiver_phone}</a></div></div>
+  <div className="parcelOpsFields">
+   <label>حالة الشحنة<select value={p.status||'pending'} disabled={busy===p.id} onChange={e=>updateParcel(p,{status:e.target.value})}>{parcelStatuses.map(([v,l])=><option value={v} key={v}>{l}</option>)}</select></label>
+   <label>قيمة الشحن (ج.س)<input type="number" min="0" defaultValue={p.price_sdg||''} placeholder="تحديد السعر" disabled={busy===p.id} onBlur={e=>{const value=e.target.value;if(value!==''&&Number(value)>=0&&Number(value)!==Number(p.price_sdg||0))updateParcel(p,{price_sdg:Number(value)})}}/></label>
+   {isAdmin&&<label>إسناد إلى شركة<select value={p.operator_id||''} disabled={busy===p.id} onChange={e=>updateParcel(p,{operator_id:e.target.value||null})}><option value="">غير مسندة</option>{companies.map(o=><option value={o.id} key={o.id}>{o.name}</option>)}</select></label>}
+  </div>
+  <div className="parcelCardFoot"><small>تاريخ الطلب: {new Date(p.created_at).toLocaleString('ar-SD')}</small><small>آخر تحديث: {new Date(p.updated_at||p.created_at).toLocaleString('ar-SD')}</small></div>
+ </article>)}</div>:<div className="empty"><Package size={36}/><h3>لا توجد طلبات شحن</h3><p>{isAdmin?'ستظهر طلبات الركاب هنا لتعيين شركة النقل ومتابعة التنفيذ.':'ستظهر الطلبات التي أسندتها إدارة المنصة إلى شركتك.'}</p></div>}
  </section>
 }
 function SupportCenter(){
