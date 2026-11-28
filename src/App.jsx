@@ -515,7 +515,7 @@ function AdminTripPayments({session,notify}){
   if(r.error)notify('تعذر تحميل إثباتات الدفع: '+r.error.message);
   setRows(r.data||[]);setLoading(false);
  };
- useEffect(()=>{load()},[]);
+ useEffect(()=>{load();const channel=supabase.channel('admin-payment-submissions').on('postgres_changes',{event:'*',schema:'public',table:'trip_payment_submissions'},()=>load()).subscribe();return()=>{supabase.removeChannel(channel)}},[]);
  const review=async(row,approved)=>{
   const note=approved?'':(window.prompt('سبب رفض إثبات الدفع (اختياري)')||'');
   if(!approved&&!window.confirm('تأكيد رفض إثبات الدفع؟'))return;
