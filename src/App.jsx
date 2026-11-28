@@ -243,11 +243,15 @@ function PassengerTripTracking({session,notify}){
 }
 function DriverDashboard({session,notify}){
  const user=session?.user;
- const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[sharingTrip,setSharingTrip]=useState(''),[lastPosition,setLastPosition]=useState(null);
+ const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[sharingTrip,setSharingTrip]=useState(''),[lastPosition,setLastPosition]=useState(null),[profile,setProfile]=useState(null);
  const watchRef=React.useRef(null);
  const load=async()=>{
   if(!user||!supabase){setLoading(false);return}
   setLoading(true);
+  const profileResult=await supabase.from('profiles').select('requested_role,registration_status').eq('id',user.id).maybeSingle();
+  if(profileResult.error){notify('تعذر التحقق من حالة حساب السائق: '+profileResult.error.message);setLoading(false);return}
+  setProfile(profileResult.data||null);
+  if(profileResult.data?.requested_role!=='driver'||profileResult.data?.registration_status!=='active'){setRows([]);setLoading(false);return}
   const r=await supabase.from('trips').select('id,origin_city,destination_city,origin_terminal,destination_terminal,departure_at,arrival_at,status,driver_id,buses(name,plate_number,seat_count),operators(name,phone)').eq('driver_id',user.id).order('departure_at',{ascending:false});
   if(r.error)notify('تعذر تحميل رحلات السائق: '+r.error.message);
   setRows(r.data||[]);setLoading(false);
@@ -273,7 +277,7 @@ function DriverDashboard({session,notify}){
  if(!user)return <main className="content narrow"><div className="empty"><h2>سجّل الدخول أولاً</h2><p>لوحة السائق مخصصة لحسابات السائقين المعتمدة.</p></div></main>;
  return <main className="content">
   <div className="adminHead"><div><span className="eyebrow green">بوابة السائق</span><h1>رحلاتي ومشاركة الموقع</h1><p className="muted">تابع الرحلات المسندة إليك وحدّث حالتها وشارك موقع الباص أثناء الرحلة.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
-  {loading?<div className="empty">جارٍ تحميل الرحلات…</div>:rows.length? <div className="tripList">{rows.map(t=><article className="trip driverTrip" key={t.id}>
+  {loading?<div className="empty">جارٍ تحميل الرحلات…</div>:profile?.registration_status==='pending_review'?<div className="noticeCard"><ShieldCheck size={28}/><div><b>حسابك بانتظار اعتماد الإدارة</b><p>بعد مراجعة بياناتك واعتماد الحساب ستظهر الرحلات المسندة إليك.</p></div></div>:rows.length? <div className="tripList">{rows.map(t=><article className="trip driverTrip" key={t.id}>
    <div className="driverTripHead"><div><b>{t.origin_city} ← {t.destination_city}</b><small>{t.origin_terminal||'موقف المغادرة غير محدد'} ← {t.destination_terminal||'موقف الوصول غير محدد'}</small><small>{new Date(t.departure_at).toLocaleString('ar-SD')} · {t.buses?.name||'الباص'} · {t.buses?.plate_number||'—'}</small><small>شركة النقل: {t.operators?.name||'—'}</small></div><span className="status">{t.status}</span></div>
    <div className="driverTripActions">
     {t.status==='scheduled'&&<button className="primary" disabled={busy} onClick={()=>changeStatus(t,'boarding')}>بدء الصعود</button>}
@@ -504,6 +508,36 @@ function AdminTripPayments({session,notify}){
  </section>
 }
 
+function AdminDriverApprovals({notify}){
+ const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState('');
+ const load=async()=>{
+  setLoading(true);
+  const r=await supabase.from('profiles').select('id,full_name,phone,residence,created_at').eq('requested_role','driver').eq('registration_status','pending_review').order('created_at',{ascending:false});
+  if(r.error)notify('تعذر تحميل طلبات اعتماد السائقين: '+r.error.message);
+  setRows(r.data||[]);setLoading(false);
+ };
+ useEffect(()=>{load()},[]);
+ const approve=async(row)=>{
+  if(!window.confirm('اعتماد حساب السائق '+(row.full_name||row.phone||'')+'؟'))return;
+  setBusy(row.id);
+  const r=await supabase.rpc('admin_approve_driver_account',{p_profile_id:row.id});
+  setBusy('');
+  if(r.error){notify('تعذر اعتماد حساب السائق: '+r.error.message);return}
+  if(!r.data){notify('لم يعد الحساب في قائمة الانتظار؛ حدّث القائمة.');await load();return}
+  notify('تم اعتماد حساب السائق. سيرتبط بالشركة تلقائياً عند تطابق رقم الهاتف وتفعيل الشركة.');
+  await load();
+ };
+ if(loading)return <div className="empty">جارٍ تحميل طلبات اعتماد السائقين…</div>;
+ if(!rows.length)return <div className="empty"><UserCheck size={36}/><h3>لا توجد حسابات سائقين بانتظار الاعتماد</h3></div>;
+ return <section className="section">
+  <div className="sectionHead"><div><h2>اعتماد حسابات السائقين</h2><p className="muted">راجع بيانات السائق قبل تفعيل الحساب وربطه بالشركة.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
+  <div className="tripList">{rows.map(row=><article className="trip paymentReviewCard" key={row.id}>
+   <div><span className="eyebrow green">طلب اعتماد سائق</span><h3>{row.full_name||'اسم غير مسجل'}</h3><p>{row.phone||'لا يوجد رقم هاتف'}</p><small className="muted">{row.residence||'مكان السكن غير مسجل'} · {new Date(row.created_at).toLocaleDateString('ar-SD')}</small></div>
+   <button className="primary" disabled={busy===row.id} onClick={()=>approve(row)}>{busy===row.id?'جارٍ الاعتماد…':'اعتماد حساب السائق'}</button>
+  </article>)}</div>
+ </section>
+}
+
 function AdminDashboard({session,notify,onLogout}){
  const [tab,setTab]=useState('companies'),[companies,setCompanies]=useState([]),[trips,setTrips]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const isAdmin=session?.user?.app_metadata?.role==='admin';
@@ -522,8 +556,8 @@ function AdminDashboard({session,notify,onLogout}){
  return <main className="content"><div className="adminHead"><div><span className="eyebrow green">لوحة الإدارة</span><h1>إدارة منصة تأمين الرحلة</h1><p className="muted">بيانات مباشرة من قاعدة البيانات.</p></div><div className="modalActions"><button className="outline" onClick={load} disabled={loading}>تحديث البيانات</button><button className="dangerCall" onClick={onLogout}><LogOut size={17}/> تسجيل الخروج</button></div></div>
  {loading?<div className="empty">جارٍ تحميل بيانات الإدارة…</div>:error?<div className="empty"><b>تعذر تحميل اللوحة</b><p>{error}</p></div>:<>
  <div className="metrics"><div><Bus/><small>شركات النقل</small><b>{companies.length}</b></div><div><Ticket/><small>الرحلات المسجلة</small><b>{trips.length}</b></div><div><ShieldCheck/><small>الشركات المعتمدة</small><b>{companies.filter(x=>x.verified).length}</b></div></div>
- <div className="adminTabs"><button className={tab==='companies'?'active':''} onClick={()=>setTab('companies')}>الشركات</button><button className={tab==='trips'?'active':''} onClick={()=>setTab('trips')}>الرحلات</button><button className={tab==='payments'?'active':''} onClick={()=>setTab('payments')}>مدفوعات الركاب</button><button className={tab==='subscriptions'?'active':''} onClick={()=>setTab('subscriptions')}>اشتراكات الشركات</button><button className={tab==='parcels'?'active':''} onClick={()=>setTab('parcels')}>الطرود</button><button className={tab==='verify'?'active':''} onClick={()=>setTab('verify')}>التحقق من التذاكر</button></div>
- {tab==='payments'?<AdminTripPayments session={session} notify={notify}/>:tab==='subscriptions'?<AdminCompanySubscriptions session={session} notify={notify}/>:tab==='parcels'?<ParcelOperations isAdmin notify={notify}/>:tab==='verify'?<TicketVerification notify={notify}/>:tab==='companies'?<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>الهاتف</th><th>حالة الاعتماد</th><th>تاريخ التسجيل</th></tr></thead><tbody>{companies.map(c=><tr key={c.id}><td>{c.name}</td><td><a href={'tel:'+c.phone}>{c.phone}</a></td><td><span className="status">{c.verified?'معتمدة':'بانتظار المراجعة'}</span></td><td>{new Date(c.created_at).toLocaleDateString('ar-SD')}</td></tr>)}</tbody></table></div>:<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>المسار</th><th>المغادرة</th><th>الباص</th><th>السعر</th><th>الحالة</th></tr></thead><tbody>{trips.map(t=><tr key={t.id}><td>{t.operators?.name||'—'}</td><td>{t.origin_city} ← {t.destination_city}</td><td>{new Date(t.departure_at).toLocaleString('ar-SD')}</td><td>{t.buses?.name||'—'} ({t.buses?.seat_count||0})</td><td>{money(Number(t.price_sdg))}</td><td>{t.status}</td></tr>)}</tbody></table></div>}
+ <div className="adminTabs"><button className={tab==='companies'?'active':''} onClick={()=>setTab('companies')}>الشركات</button><button className={tab==='trips'?'active':''} onClick={()=>setTab('trips')}>الرحلات</button><button className={tab==='payments'?'active':''} onClick={()=>setTab('payments')}>مدفوعات الركاب</button><button className={tab==='drivers'?'active':''} onClick={()=>setTab('drivers')}>اعتماد السائقين</button><button className={tab==='subscriptions'?'active':''} onClick={()=>setTab('subscriptions')}>اشتراكات الشركات</button><button className={tab==='parcels'?'active':''} onClick={()=>setTab('parcels')}>الطرود</button><button className={tab==='verify'?'active':''} onClick={()=>setTab('verify')}>التحقق من التذاكر</button></div>
+ {tab==='payments'?<AdminTripPayments session={session} notify={notify}/>:tab==='drivers'?<AdminDriverApprovals notify={notify}/>:tab==='subscriptions'?<AdminCompanySubscriptions session={session} notify={notify}/>:tab==='parcels'?<ParcelOperations isAdmin notify={notify}/>:tab==='verify'?<TicketVerification notify={notify}/>:tab==='companies'?<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>الهاتف</th><th>حالة الاعتماد</th><th>تاريخ التسجيل</th></tr></thead><tbody>{companies.map(c=><tr key={c.id}><td>{c.name}</td><td><a href={'tel:'+c.phone}>{c.phone}</a></td><td><span className="status">{c.verified?'معتمدة':'بانتظار المراجعة'}</span></td><td>{new Date(c.created_at).toLocaleDateString('ar-SD')}</td></tr>)}</tbody></table></div>:<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>المسار</th><th>المغادرة</th><th>الباص</th><th>السعر</th><th>الحالة</th></tr></thead><tbody>{trips.map(t=><tr key={t.id}><td>{t.operators?.name||'—'}</td><td>{t.origin_city} ← {t.destination_city}</td><td>{new Date(t.departure_at).toLocaleString('ar-SD')}</td><td>{t.buses?.name||'—'} ({t.buses?.seat_count||0})</td><td>{money(Number(t.price_sdg))}</td><td>{t.status}</td></tr>)}</tbody></table></div>}
  </>}
  </main>
 }
@@ -531,7 +565,7 @@ export default function App(){
 const[page,setPage]=useState('auth'),[from,setFrom]=useState('الخرطوم'),[to,setTo]=useState('بورتسودان'),[date,setDate]=useState('2026-11-29'),[trips,setTrips]=useState(()=>{try{return JSON.parse(localStorage.getItem('trip_demo_trips'))||initialTrips}catch{return initialTrips}}),[selected,setSelected]=useState(null),[seat,setSeat]=useState(null),[seatNumbers,setSeatNumbers]=useState([]),[requestedSeats,setRequestedSeats]=useState(1),[fromState,setFromState]=useState('ولاية الخرطوم'),[toState,setToState]=useState('ولاية البحر الأحمر'),[searchResults,setSearchResults]=useState([]),[searchBusy,setSearchBusy]=useState(false),[name,setName]=useState(''),[phone,setPhone]=useState(''),[bookings,setBookings]=useState(()=>{try{return JSON.parse(localStorage.getItem('trip_demo_bookings'))||[]}catch{return []}}),[tab,setTab]=useState('trips'),[showMenu,setShowMenu]=useState(false),[notice,setNotice]=useState(''),[showTripForm,setShowTripForm]=useState(false),[newTrip,setNewTrip]=useState({company:'شركة جديدة',from:'الخرطوم',to:'بورتسودان',date:'2026-11-30',time:'07:00',arrival:'17:00',price:'50000',seats:'28',bus:'باص سياحي'}),[parcel,setParcel]=useState({from:'الخرطوم',to:'بورتسودان',sender:'',senderPhone:'',receiver:'',receiverPhone:'',description:''}),[parcelRows,setParcelRows]=useState([]),[session,setSession]=useState(null),[authEmail,setAuthEmail]=useState(''),[authPassword,setAuthPassword]=useState(''),[authName,setAuthName]=useState(''),[residence,setResidence]=useState(''),[phoneNumber,setPhoneNumber]=useState(''),[accountType,setAccountType]=useState('passenger'),[authMode,setAuthMode]=useState('signin'),[authBusy,setAuthBusy]=useState(false),[emailOtp,setEmailOtp]=useState(''),[awaitingEmailOtp,setAwaitingEmailOtp]=useState(false),[backendStatus,setBackendStatus]=useState('جارٍ الاتصال');
 useEffect(()=>{localStorage.setItem('trip_demo_trips',JSON.stringify(trips))},[trips]);
 useEffect(()=>{localStorage.setItem('trip_demo_bookings',JSON.stringify(bookings))},[bookings]);
-useEffect(()=>{if(session?.user)setPage(session.user.app_metadata?.role==='admin'?'admin':'home')},[session?.user?.id]);
+useEffect(()=>{if(!session?.user)return;let active=true;const user=session.user;if(user.app_metadata?.role==='admin'){setPage('admin');return}(async()=>{const r=await supabase.from('profiles').select('requested_role').eq('id',user.id).maybeSingle();if(!active)return;setPage(r.data?.requested_role==='driver'?'driver':r.data?.requested_role==='operator'?'operator':'home')})();return()=>{active=false}},[session?.user?.id]);
 useEffect(()=>{if(!supabase)return;let alive=true;supabase.auth.getSession().then(({data})=>{if(alive)setSession(data.session)});const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,nextSession)=>{setSession(nextSession)});return()=>{alive=false;subscription.unsubscribe()}},[]);
 useEffect(()=>{if(!supabase)return;let alive=true;(async()=>{setBackendStatus('جارٍ تحميل الرحلات');const{data,error}=await supabase.from('trips').select('id,origin_city,destination_city,departure_at,arrival_at,price_sdg,status,operators(name),buses(name,seat_count)').eq('status','scheduled').order('departure_at');if(!alive)return;if(error){setBackendStatus('تعذر تحميل الرحلات');console.error(error);return}const mapped=(data||[]).map(t=>({id:t.id,company:t.operators?.name||'شركة نقل',from:t.origin_city,to:t.destination_city,date:t.departure_at.slice(0,10),time:new Date(t.departure_at).toLocaleTimeString('ar-SD',{hour:'2-digit',minute:'2-digit'}),arrival:t.arrival_at?new Date(t.arrival_at).toLocaleTimeString('ar-SD',{hour:'2-digit',minute:'2-digit'}):'—',price:Number(t.price_sdg),seats:t.buses?.seat_count||0,totalSeats:t.buses?.seat_count||0,bus:t.buses?.name||'باص',rating:5}));setTrips(mapped);setBackendStatus('متصل بقاعدة البيانات')})();return()=>{alive=false}},[]);
 useEffect(()=>{if(!supabase||!session?.user){setParcelRows([]);return}let alive=true;supabase.from('parcels').select('id,tracking_code,sender_name,receiver_name,origin_city,destination_city,status,created_at').eq('sender_id',session.user.id).order('created_at',{ascending:false}).then(({data,error})=>{if(alive&&!error)setParcelRows(data||[])});return()=>{alive=false}},[session?.user?.id]);
@@ -549,14 +583,14 @@ if(awaitingEmailOtp){
  if(!/^\\d{6}$/.test(emailOtp)){notify('أدخل رمز التأكيد المكوّن من 6 أرقام');return}
  setAuthBusy(true);const verified=await supabase.auth.verifyOtp({email:authEmail.trim(),token:emailOtp.trim(),type:'signup'});setAuthBusy(false);
  if(verified.error){notify('تعذر تأكيد البريد: '+verified.error.message);return}
- setAwaitingEmailOtp(false);setEmailOtp('');setSession(verified.data.session);notify('تم تأكيد البريد الإلكتروني وتفعيل الحساب');setPage('home');return;
+ setAwaitingEmailOtp(false);setEmailOtp('');setSession(verified.data.session);const profile=await supabase.from('profiles').select('requested_role').eq('id',verified.data.user.id).maybeSingle();notify('تم تأكيد البريد الإلكتروني وتفعيل الحساب');setPage(profile.data?.requested_role==='driver'?'driver':profile.data?.requested_role==='operator'?'operator':'home');return;
 }
 if(!authEmail.trim()||authPassword.length<8){notify('أدخل البريد وكلمة مرور من 8 أحرف على الأقل');return}
 if(authMode==='signup'&&(!authName.trim()||authName.trim().split(/\\s+/).length<2||!phoneNumber.trim()||!residence.trim())){notify('أدخل الاسم الكامل (اسمين على الأقل) ومكان السكن ورقم الهاتف');return}
 setAuthBusy(true);let result;try{result=authMode==='signup'?await supabase.auth.signUp({email:authEmail.trim(),password:authPassword,options:{data:{full_name:authName.trim(),phone:phoneNumber.trim(),residence:residence.trim(),requested_role:accountType}}}):await supabase.auth.signInWithPassword({email:authEmail.trim(),password:authPassword})}catch(e){setAuthBusy(false);notify('تعذر الاتصال بخدمة الحسابات: '+(e?.message||'تحقق من الإنترنت وحاول مجدداً'));return}setAuthBusy(false);
 if(result.error){notify(result.error.message);return}
 if(authMode==='signup'&&!result.data.session){setAwaitingEmailOtp(true);notify('أرسلنا رمز تأكيد من 6 أرقام إلى بريدك الإلكتروني.');return}
-let activeSession=result.data.session;let signedUser=result.data.user;let isAdmin=signedUser?.app_metadata?.role==='admin';if(signedUser?.email?.toLowerCase()==='wsfalkasr@gmail.com'&&!isAdmin){const provision=await supabase.functions.invoke('trip-owner-bootstrap',{body:{}});if(provision.error||!provision.data?.success){await supabase.auth.signOut();setSession(null);notify('تعذر تفعيل صلاحية المطوّر: '+(provision.error?.message||provision.data?.error||'حاول مرة أخرى'));return}const refreshed=await supabase.auth.refreshSession();if(refreshed.error||!refreshed.data.session){await supabase.auth.signOut();setSession(null);notify('تم منح الصلاحية، أعد تسجيل الدخول لتحديث الجلسة.');return}activeSession=refreshed.data.session;signedUser=activeSession.user;isAdmin=signedUser?.app_metadata?.role==='admin';if(!isAdmin){await supabase.auth.signOut();setSession(null);notify('تم تنفيذ الطلب لكن لم تظهر صلاحية الإدارة في الجلسة. أعد المحاولة بعد قليل.');return}}setSession(activeSession);notify(isAdmin?'تم تسجيل دخول المالك بنجاح':'تم تسجيل الدخول بنجاح');setPage(isAdmin?'admin':'home')
+let activeSession=result.data.session;let signedUser=result.data.user;let isAdmin=signedUser?.app_metadata?.role==='admin';if(signedUser?.email?.toLowerCase()==='wsfalkasr@gmail.com'&&!isAdmin){const provision=await supabase.functions.invoke('trip-owner-bootstrap',{body:{}});if(provision.error||!provision.data?.success){await supabase.auth.signOut();setSession(null);notify('تعذر تفعيل صلاحية المطوّر: '+(provision.error?.message||provision.data?.error||'حاول مرة أخرى'));return}const refreshed=await supabase.auth.refreshSession();if(refreshed.error||!refreshed.data.session){await supabase.auth.signOut();setSession(null);notify('تم منح الصلاحية، أعد تسجيل الدخول لتحديث الجلسة.');return}activeSession=refreshed.data.session;signedUser=activeSession.user;isAdmin=signedUser?.app_metadata?.role==='admin';if(!isAdmin){await supabase.auth.signOut();setSession(null);notify('تم تنفيذ الطلب لكن لم تظهر صلاحية الإدارة في الجلسة. أعد المحاولة بعد قليل.');return}}setSession(activeSession);const profile=isAdmin?null:await supabase.from('profiles').select('requested_role').eq('id',signedUser.id).maybeSingle();notify(isAdmin?'تم تسجيل دخول المالك بنجاح':'تم تسجيل الدخول بنجاح');setPage(isAdmin?'admin':profile.data?.requested_role==='driver'?'driver':profile.data?.requested_role==='operator'?'operator':'home')
 };
 const logout=async()=>{setAuthBusy(true);const{error}=await supabase.auth.signOut();setAuthBusy(false);if(error){notify('تعذر تسجيل الخروج: '+error.message);return}setSession(null);setPage('auth');setAuthMode('signin');setAwaitingEmailOtp(false);setEmailOtp('');setAuthPassword('');notify('تم تسجيل الخروج بنجاح')};
 const resendEmailOtp=async()=>{setAuthBusy(true);const result=await supabase.auth.resend({type:'signup',email:authEmail.trim()});setAuthBusy(false);if(result.error){notify(result.error.message);return}notify('أعدنا إرسال رمز التأكيد إلى بريدك الإلكتروني')}
