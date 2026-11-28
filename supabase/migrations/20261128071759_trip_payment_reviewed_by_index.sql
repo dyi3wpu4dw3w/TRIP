@@ -1,0 +1,2 @@
+create index if not exists idx_trip_payment_submissions_reviewed_by_fk
+on public.trip_payment_submissions(reviewed_by);
