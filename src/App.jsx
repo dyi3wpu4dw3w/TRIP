@@ -1,6 +1,8 @@
 import React,{useEffect,useMemo,useState}from'react';
 import {QRCodeSVG} from 'qrcode.react';
 import { supabase, backendReady } from './lib/supabase.js';
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 import{Bus,MapPin,CalendarDays,ArrowLeftRight,Search,Clock,Armchair,Ticket,Package,User,Menu,X,CheckCircle2,ChevronLeft,ShieldCheck,Phone,Wallet,LayoutDashboard,Plus,LogOut,ArrowRight,Star,MessageCircle,Send,Mic,Square,Mail,Facebook,Headphones,ExternalLink,Navigation}from'lucide-react';
 const stateCities={'ولاية الخرطوم':['الخرطوم','أم درمان','بحري'],'ولاية الجزيرة':['مدني','الحصاحيصا','المناقل'],'ولاية البحر الأحمر':['بورتسودان'],'ولاية كسلا':['كسلا'],'ولاية القضارف':['القضارف'],'ولاية نهر النيل':['عطبرة','الدامر','شندي'],'الولاية الشمالية':['دنقلا','مروي'],'ولاية النيل الأبيض':['كوستي','ربك'],'ولاية سنار':['سنار'],'ولاية النيل الأزرق':['الدمازين'],'ولاية شمال كردفان':['الأبيض'],'ولاية جنوب كردفان':['كادقلي'],'ولاية غرب كردفان':['الفولة'],'ولاية شمال دارفور':['الفاشر'],'ولاية جنوب دارفور':['نيالا'],'ولاية غرب دارفور':['الجنينة'],'ولاية وسط دارفور':['زالنجي'],'ولاية شرق دارفور':['الضعين']};
 const states=Object.keys(stateCities);
@@ -245,6 +247,14 @@ function DriverDashboard({session,notify}){
  const user=session?.user;
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[sharingTrip,setSharingTrip]=useState(''),[lastPosition,setLastPosition]=useState(null),[profile,setProfile]=useState(null);
  const watchRef=React.useRef(null);
+ const clearWatch=async()=>{
+  const active=watchRef.current;watchRef.current=null;
+  if(!active)return;
+  try{
+   if(active.native)await Geolocation.clearWatch({id:active.id});
+   else if(navigator.geolocation)navigator.geolocation.clearWatch(active.id);
+  }catch{}
+ };
  const load=async()=>{
   if(!user||!supabase){setLoading(false);return}
   setLoading(true);
@@ -256,23 +266,49 @@ function DriverDashboard({session,notify}){
   if(r.error)notify('تعذر تحميل رحلات السائق: '+r.error.message);
   setRows(r.data||[]);setLoading(false);
  };
- useEffect(()=>{load();return()=>{if(watchRef.current!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchRef.current)}},[user?.id]);
+ useEffect(()=>{load();return()=>{void clearWatch()}},[user?.id]);
  const changeStatus=async(t,status)=>{
   setBusy(true);const r=await supabase.rpc('driver_update_trip_status',{p_trip_id:t.id,p_status:status});setBusy(false);
   if(r.error){notify('تعذر تحديث حالة الرحلة: '+r.error.message);return}
   notify('تم تحديث حالة الرحلة');load();
  };
- const stopSharing=()=>{if(watchRef.current!==null&&navigator.geolocation){navigator.geolocation.clearWatch(watchRef.current);watchRef.current=null}setSharingTrip('');notify('تم إيقاف مشاركة الموقع')};
- const startSharing=(t)=>{
-  if(!navigator.geolocation){notify('المتصفح لا يدعم تحديد الموقع');return}
-  if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current);
+ const stopSharing=async()=>{
+  await clearWatch();setSharingTrip('');notify('تم إيقاف مشاركة الموقع');
+ };
+ const savePosition=async(pos,t)=>{
+  if(!pos?.coords)return;
+  const point={trip_id:t.id,driver_id:user.id,latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy_m:pos.coords.accuracy,updated_at:new Date().toISOString()};
+  const saved=await supabase.from('driver_trip_locations').upsert(point,{onConflict:'trip_id'});
+  if(saved.error){notify('تعذر تحديث الموقع: '+saved.error.message);await stopSharing();return}
+  setLastPosition({tripId:t.id,lat:point.latitude,lng:point.longitude,updatedAt:point.updated_at});
+ };
+ const startSharing=async(t)=>{
+  if(watchRef.current)await clearWatch();
   setSharingTrip(t.id);
-  watchRef.current=navigator.geolocation.watchPosition(async pos=>{
-   const point={trip_id:t.id,driver_id:user.id,latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy_m:pos.coords.accuracy,updated_at:new Date().toISOString()};
-   const saved=await supabase.from('driver_trip_locations').upsert(point,{onConflict:'trip_id'});
-   if(saved.error){notify('تعذر تحديث الموقع: '+saved.error.message);stopSharing();return}
-   setLastPosition({tripId:t.id,lat:point.latitude,lng:point.longitude,updatedAt:point.updated_at});
-  },err=>{notify(err.code===1?'اسمح للتطبيق بالوصول إلى الموقع لبدء المشاركة.':'تعذر تحديد موقعك. تحقق من GPS والإنترنت.');stopSharing()},{enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+  const options={enableHighAccuracy:true,maximumAge:5000,timeout:20000};
+  try{
+   if(Capacitor.isNativePlatform()){
+    let permission=await Geolocation.checkPermissions();
+    if(permission.location!=='granted')permission=await Geolocation.requestPermissions();
+    if(permission.location!=='granted')throw new Error('يجب السماح للتطبيق بالوصول إلى الموقع من إعدادات الهاتف.');
+    const id=await Geolocation.watchPosition(options,(position,error)=>{
+     if(error){notify('تعذر تحديد الموقع. تحقق من GPS وصلاحية الموقع.');void stopSharing();return}
+     if(position)void savePosition(position,t);
+    });
+    watchRef.current={native:true,id};
+   }else{
+    if(!navigator.geolocation)throw new Error('هذا المتصفح لا يدعم تحديد الموقع.');
+    const id=navigator.geolocation.watchPosition(
+     position=>{void savePosition(position,t)},
+     error=>{notify(error.code===1?'اسمح للتطبيق بالوصول إلى الموقع لبدء المشاركة.':'تعذر تحديد موقعك. تحقق من GPS والإنترنت.');void stopSharing()},
+     options
+    );
+    watchRef.current={native:false,id};
+   }
+  }catch(error){
+   await clearWatch();setSharingTrip('');
+   notify(error?.message||'تعذر تشغيل مشاركة الموقع. تحقق من إذن الموقع والاتصال.');
+  }
  };
  if(!user)return <main className="content narrow"><div className="empty"><h2>سجّل الدخول أولاً</h2><p>لوحة السائق مخصصة لحسابات السائقين المعتمدة.</p></div></main>;
  return <main className="content">
