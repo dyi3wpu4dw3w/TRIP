@@ -157,7 +157,7 @@ function ChatCenter({session,notify}){
 }
 function BookingTicketView({booking,session,notify,onBookings}){
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true);
- const [submission,setSubmission]=useState(null),[paymentProvider,setPaymentProvider]=useState(''),[paymentReference,setPaymentReference]=useState(''),[paymentNote,setPaymentNote]=useState(''),[submitting,setSubmitting]=useState(false);
+ const [submission,setSubmission]=useState(null);
  const groupId=booking?.groupId,user=session?.user;
  const load=async()=>{
   if(!groupId||!user||!supabase){setRows([]);setSubmission(null);setLoading(false);return}
@@ -181,20 +181,6 @@ function BookingTicketView({booking,session,notify,onBookings}){
  },[groupId,user?.id]);
  const issued=rows.length>0&&rows.every(x=>x.status==='confirmed'&&x.ticket_token&&x.ticket_number);
  const total=rows.reduce((sum,x)=>sum+Number(x.amount_sdg||0),0);
- const submitPayment=async()=>{
-  if(!paymentProvider||paymentReference.trim().length<4){notify('اختر وسيلة الدفع وأدخل رقم العملية الصحيح');return}
-  if(!rows.length||rows.some(x=>x.status!=='pending')){notify('لا توجد حجوزات معلّقة صالحة لإثبات الدفع');return}
-  setSubmitting(true);
-  const result=await supabase.rpc('submit_trip_payment_proof',{
-   p_booking_group_id:groupId,p_provider:paymentProvider,
-   p_provider_reference:paymentReference.trim(),p_note:paymentNote.trim()
-  });
-  setSubmitting(false);
-  if(result.error){notify('تعذر إرسال إثبات الدفع: '+result.error.message);return}
-  setPaymentReference('');setPaymentNote('');
-  notify('وصل إثبات الدفع إلى الإدارة للمراجعة');
-  await load();
- };
  if(loading)return <div className="empty">جارٍ تحميل التذكرة…</div>;
  return <main className="content narrow">
   <div className={issued?'success':'noticeCard'}>{issued?<CheckCircle2 size={40}/>:<Wallet size={36}/>}<div><h1>{issued?'تم تأكيد الحجز وإصدار التذاكر':'طلب الحجز محفوظ – بانتظار الدفع'}</h1><p>{issued?'احتفظ برمز QR الخاص بكل مقعد، وستتمكن شركة النقل من التحقق منه.':'أكمل التحويل وأرسل رقم العملية من نفس الشاشة. لن تصدر التذكرة النهائية إلا بعد مراجعة الإدارة وتأكيد وصول المبلغ.'}</p></div></div>
