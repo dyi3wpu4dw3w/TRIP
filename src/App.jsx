@@ -528,7 +528,7 @@ function AdminDriverApprovals({notify}){
   await load();
  };
  if(loading)return <div className="empty">جارٍ تحميل طلبات اعتماد السائقين…</div>;
- if(!rows.length)return <div className="empty"><UserCheck size={36}/><h3>لا توجد حسابات سائقين بانتظار الاعتماد</h3></div>;
+ if(!rows.length)return <div className="empty"><User size={36}/><h3>لا توجد حسابات سائقين بانتظار الاعتماد</h3></div>;
  return <section className="section">
   <div className="sectionHead"><div><h2>اعتماد حسابات السائقين</h2><p className="muted">راجع بيانات السائق قبل تفعيل الحساب وربطه بالشركة.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
   <div className="tripList">{rows.map(row=><article className="trip paymentReviewCard" key={row.id}>
