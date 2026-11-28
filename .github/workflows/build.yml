@@ -45,6 +45,37 @@ jobs:
       - name: Generate Android project
         run: npx cap add android
 
+      - name: Configure Android location and microphone permissions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
+          permissions = [
+              "ACCESS_COARSE_LOCATION",
+              "ACCESS_FINE_LOCATION",
+              "RECORD_AUDIO",
+              "MODIFY_AUDIO_SETTINGS",
+          ]
+          additions = [
+              f'    <uses-permission android:name="android.permission.{permission}" />'
+              for permission in permissions
+              if f"android.permission.{permission}" not in text
+          ]
+          features = [
+              '    <uses-feature android:name="android.hardware.location.gps" android:required="false" />',
+              '    <uses-feature android:name="android.hardware.microphone" android:required="false" />',
+          ]
+          for feature in features:
+              feature_name = feature.split('name="')[1].split('"')[0]
+              if feature_name not in text:
+                  additions.append(feature)
+          if additions:
+              text = text.replace("    <application", "\n".join(additions) + "\n    <application", 1)
+              path.write_text(text)
+          PY
+
       - name: Apply full-image TRIP launcher icon
         shell: bash
         run: |
