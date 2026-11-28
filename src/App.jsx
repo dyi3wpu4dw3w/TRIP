@@ -147,26 +147,48 @@ function ChatCenter({session,notify}){
 }
 function BookingTicketView({booking,session,notify,onBookings}){
  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true);
+ const [submission,setSubmission]=useState(null),[paymentProvider,setPaymentProvider]=useState(''),[paymentReference,setPaymentReference]=useState(''),[paymentNote,setPaymentNote]=useState(''),[submitting,setSubmitting]=useState(false);
  const groupId=booking?.groupId,user=session?.user;
  const load=async()=>{
+  if(!groupId||!user||!supabase){setRows([]);setSubmission(null);setLoading(false);return}
   setLoading(true);
-  if(!groupId||!user||!supabase){setRows([]);setLoading(false);return}
-  const r=await supabase.from('bookings').select('id,booking_code,seat_number,status,amount_sdg,ticket_number,ticket_token,passenger_name,passenger_phone,trips(origin_city,destination_city,departure_at,buses(name,plate_number),operators(name))').eq('booking_group_id',groupId).eq('passenger_id',user.id).order('seat_number');
+  const [r,p]=await Promise.all([
+   supabase.from('bookings').select('id,booking_code,seat_number,status,amount_sdg,ticket_number,ticket_token,passenger_name,passenger_phone,trips(origin_city,destination_city,departure_at,buses(name,plate_number),operators(name))').eq('booking_group_id',groupId).eq('passenger_id',user.id).order('seat_number'),
+   supabase.from('trip_payment_submissions').select('id,provider,provider_reference,amount_sdg,status,admin_note,created_at').eq('booking_group_id',groupId).eq('passenger_id',user.id).order('created_at',{ascending:false}).limit(1).maybeSingle()
+  ]);
   if(r.error)notify('تعذر تحميل تفاصيل التذاكر: '+r.error.message);
-  setRows(r.data||[]);setLoading(false);
+  if(p.error)notify('تعذر تحميل حالة إثبات الدفع: '+p.error.message);
+  setRows(r.data||[]);setSubmission(p.data||null);setLoading(false);
  };
  useEffect(()=>{
   load();if(!groupId||!user)return;
   const ch=supabase.channel('trip-ticket-'+groupId)
    .on('postgres_changes',{event:'*',schema:'public',table:'bookings',filter:'booking_group_id=eq.'+groupId},()=>load())
    .on('postgres_changes',{event:'*',schema:'public',table:'payments',filter:'booking_group_id=eq.'+groupId},()=>load())
+   .on('postgres_changes',{event:'*',schema:'public',table:'trip_payment_submissions',filter:'booking_group_id=eq.'+groupId},()=>load())
    .subscribe();
   return()=>{supabase.removeChannel(ch)};
  },[groupId,user?.id]);
- if(loading)return <div className="empty">جارٍ تحميل التذكرة…</div>;
  const issued=rows.length>0&&rows.every(x=>x.status==='confirmed'&&x.ticket_token&&x.ticket_number);
+ const total=rows.reduce((sum,x)=>sum+Number(x.amount_sdg||0),0);
+ const submitPayment=async()=>{
+  if(!paymentProvider||paymentReference.trim().length<4){notify('اختر وسيلة الدفع وأدخل رقم العملية الصحيح');return}
+  if(!rows.length||rows.some(x=>x.status!=='pending')){notify('لا توجد حجوزات معلّقة صالحة لإثبات الدفع');return}
+  setSubmitting(true);
+  const result=await supabase.rpc('submit_trip_payment_proof',{
+   p_booking_group_id:groupId,p_provider:paymentProvider,
+   p_provider_reference:paymentReference.trim(),p_note:paymentNote.trim()
+  });
+  setSubmitting(false);
+  if(result.error){notify('تعذر إرسال إثبات الدفع: '+result.error.message);return}
+  setPaymentReference('');setPaymentNote('');
+  notify('وصل إثبات الدفع إلى الإدارة للمراجعة');
+  await load();
+ };
+ if(loading)return <div className="empty">جارٍ تحميل التذكرة…</div>;
  return <main className="content narrow">
-  <div className={issued?'success':'noticeCard'}>{issued?<CheckCircle2 size={40}/>:<Wallet size={36}/>}<div><h1>{issued?'تم تأكيد الحجز وإصدار التذاكر':'طلب الحجز محفوظ – بانتظار الدفع'}</h1><p>{issued?'احتفظ برمز QR الخاص بكل مقعد، وستتمكن شركة النقل من التحقق منه.':'لم يتم خصم أي مبلغ بعد. لن تصدر التذكرة النهائية أو رموز QR صالحة إلا بعد تأكيد الدفع من مزود الدفع.'}</p></div></div><button className="outline full" onClick={load}>تحديث حالة الدفع والتذكرة</button>
+  <div className={issued?'success':'noticeCard'}>{issued?<CheckCircle2 size={40}/>:<Wallet size={36}/>}<div><h1>{issued?'تم تأكيد الحجز وإصدار التذاكر':'طلب الحجز محفوظ – بانتظار الدفع'}</h1><p>{issued?'احتفظ برمز QR الخاص بكل مقعد، وستتمكن شركة النقل من التحقق منه.':'أكمل التحويل وأرسل رقم العملية من نفس الشاشة. لن تصدر التذكرة النهائية إلا بعد مراجعة الإدارة وتأكيد وصول المبلغ.'}</p></div></div>
+  <button className="outline full" onClick={load}>تحديث حالة الدفع والتذكرة</button>
   {rows.length?rows.map(row=><article className="ticket issuedTicket" key={row.id}>
    <div className="ticketHead"><div className="brandmark"><Bus/></div><b>تأمين الرحلة · TRIP</b><span>{issued?'تذكرة إلكترونية مؤكدة':'إشعار حجز مبدئي'}</span></div>
    <h2>{row.trips?.origin_city} <ArrowLeftRight/> {row.trips?.destination_city}</h2>
@@ -174,9 +196,29 @@ function BookingTicketView({booking,session,notify,onBookings}){
    {issued?<div className="realQr"><QRCodeSVG value={'TRIP:TICKET:'+row.ticket_token} size={184} level="H" includeMargin/><small>امسح الرمز للتحقق من التذكرة</small></div>:<div className="pendingQr"><ShieldCheck size={28}/><b>رمز QR سيصدر بعد تأكيد الدفع</b></div>}
    <p className="status">{issued?'مؤكد ومدفوع':'بانتظار الدفع'}</p>
   </article>):<div className="empty">تم حفظ الطلب، لكن تفاصيل التذاكر لم تظهر بعد. افتح حجوزاتي ثم أعد المحاولة.</div>}
+  {!issued&&rows.length>0&&<section className="formCard">
+   <h2>دفع قيمة الحجز</h2>
+   <p className="muted">الإجمالي المطلوب: <b>{money(total)}</b>. حوّل المبلغ كاملاً بإحدى الوسائل التالية، ثم أدخل رقم العملية.</p>
+   <div className="paymentWarning"><b>تنبيه قبل التحويل</b><p>تأكد أن اسم المستلم هو <strong>يوسف هاشم محمد أحمد</strong>، واكتب في خانة التعليق: <strong>تأمين الرحلة</strong>. لا تكمل التحويل إذا ظهر اسم مستلم مختلف.</p></div>
+   <div className="paymentMethods">
+    <button type="button" className={'paymentMethod '+(paymentProvider==='بنكك'?'selected':'')} onClick={()=>setPaymentProvider('بنكك')}><b>بنكك</b><img src="/payments/bankak-qr.png" alt="رمز QR بنكك"/><span>امسح الرمز من تطبيق بنكك</span></button>
+    <button type="button" className={'paymentMethod '+(paymentProvider==='ماي كاشي'?'selected':'')} onClick={()=>setPaymentProvider('ماي كاشي')}><b>ماي كاشي</b><img src="/payments/mycashi-qr.png" alt="رمز QR ماي كاشي"/><span>رقم الحساب: 401239395</span></button>
+    <button type="button" className={'paymentMethod '+(paymentProvider==='براڤو'?'selected':'')} onClick={()=>setPaymentProvider('براڤو')}><b>براڤو</b><img src="/payments/bravo-qr.png" alt="رمز QR براڤو"/><span>رقم الحساب: 76442603</span></button>
+   </div>
+   {submission?.status==='pending'&&<div className="noticeCard"><Clock size={24}/><div><b>إثبات الدفع قيد المراجعة</b><p>الوسيلة: {submission.provider} · مرجع العملية: {submission.provider_reference} · المبلغ: {money(Number(submission.amount_sdg))}</p><small>لن تحتاج إلى إرسال إثبات آخر لنفس الحجز أثناء المراجعة.</small></div></div>}
+   {submission?.status==='rejected'&&<div className="paymentWarning"><b>لم يتم قبول إثبات الدفع السابق</b><p>{submission.admin_note||'راجع رقم العملية وتفاصيل التحويل ثم أرسل إثباتاً صحيحاً.'}</p></div>}
+   {submission?.status==='approved'&&!issued&&<div className="noticeCard"><Clock size={24}/><div><b>تمت الموافقة على الدفع</b><p>حدّث حالة الحجز بعد لحظات لعرض التذاكر ورموز QR.</p></div></div>}
+   {submission?.status!=='pending'&&submission?.status!=='approved'&&<div className="entryForm">
+    <label>رقم العملية / مرجع التحويل<input value={paymentReference} onChange={e=>setPaymentReference(e.target.value)} placeholder="أدخل رقم العملية بعد التحويل"/></label>
+    <label>ملاحظات إضافية (اختياري)<textarea value={paymentNote} onChange={e=>setPaymentNote(e.target.value)} placeholder="اسم صاحب الحساب أو ملاحظة تساعد في المراجعة"/></label>
+    <button className="primary full" disabled={submitting||!paymentProvider||paymentReference.trim().length<4} onClick={submitPayment}>{submitting?'جارٍ إرسال الإثبات…':'إرسال إثبات الدفع للمراجعة'}</button>
+   </div>}
+   <small className="muted">إرسال رقم العملية لا يعني اعتماد الدفع تلقائياً. تتم مراجعة التحويل يدوياً قبل إصدار التذاكر.</small>
+  </section>}
   <button className="primary full" onClick={onBookings}>عرض حجوزاتي</button>
  </main>
 }
+
 function PassengerTripTracking({session,notify}){
  const [items,setItems]=useState([]),[loading,setLoading]=useState(true);
  const user=session?.user;
@@ -425,6 +467,43 @@ function AdminCompanySubscriptions({session,notify}){
 }
 
 
+function AdminTripPayments({session,notify}){
+ const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState('');
+ const load=async()=>{
+  setLoading(true);
+  const r=await supabase.from('trip_payment_submissions').select('*').order('created_at',{ascending:false}).limit(200);
+  if(r.error)notify('تعذر تحميل إثباتات الدفع: '+r.error.message);
+  setRows(r.data||[]);setLoading(false);
+ };
+ useEffect(()=>{load()},[]);
+ const review=async(row,approved)=>{
+  const note=approved?'':(window.prompt('سبب رفض إثبات الدفع (اختياري)')||'');
+  if(!approved&&!window.confirm('تأكيد رفض إثبات الدفع؟'))return;
+  if(approved&&!window.confirm('هل تحققت بنفسك من وصول المبلغ في الحساب قبل اعتماد الدفع وإصدار التذاكر؟'))return;
+  setBusy(row.id);
+  const r=await supabase.rpc('review_trip_payment_submission',{
+   p_submission_id:row.id,p_approved:approved,p_admin_note:note.trim()
+  });
+  setBusy('');
+  if(r.error){notify('تعذر مراجعة إثبات الدفع: '+r.error.message);return}
+  notify(approved?'تم اعتماد الدفع وإصدار التذاكر':'تم رفض إثبات الدفع');
+  await load();
+ };
+ if(loading)return <div className="empty">جارٍ تحميل إثباتات الدفع…</div>;
+ if(!rows.length)return <div className="empty"><Wallet size={36}/><h3>لا توجد إثباتات دفع حتى الآن</h3><p>ستظهر هنا طلبات الدفع التي يرسلها الركاب بعد الحجز.</p></div>;
+ return <section className="section">
+  <div className="sectionHead"><div><h2>مراجعة مدفوعات الركاب</h2><p className="muted">تحقق من التحويل في المحفظة أو البنك قبل اعتماد أي عملية.</p></div><button className="outline" onClick={load} disabled={loading}>تحديث</button></div>
+  <div className="tripList">{rows.map(row=><article className="trip paymentReviewCard" key={row.id}>
+   <div><span className="eyebrow green">إثبات دفع · {row.provider}</span><h3>{row.passenger_name}</h3><p className="muted">{row.passenger_phone}</p></div>
+   <div className="ticketDetails"><span>المبلغ<b>{money(Number(row.amount_sdg))}</b></span><span>مرجع العملية<b>{row.provider_reference}</b></span><span>الحالة<b>{row.status==='pending'?'بانتظار المراجعة':row.status==='approved'?'مقبول':'مرفوض'}</b></span><span>تاريخ الإرسال<b>{new Date(row.created_at).toLocaleString('ar-SD')}</b></span></div>
+   {row.note&&<p>ملاحظات الراكب: {row.note}</p>}
+   {row.admin_note&&<p>ملاحظة الإدارة: {row.admin_note}</p>}
+   <small className="muted">مجموعة الحجز: {row.booking_group_id}</small>
+   {row.status==='pending'&&<div className="modalActions"><button className="primary" disabled={busy===row.id} onClick={()=>review(row,true)}>تأكيد استلام المبلغ</button><button className="outline" disabled={busy===row.id} onClick={()=>review(row,false)}>رفض الإثبات</button></div>}
+  </article>)}</div>
+ </section>
+}
+
 function AdminDashboard({session,notify,onLogout}){
  const [tab,setTab]=useState('companies'),[companies,setCompanies]=useState([]),[trips,setTrips]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const isAdmin=session?.user?.app_metadata?.role==='admin';
@@ -443,8 +522,8 @@ function AdminDashboard({session,notify,onLogout}){
  return <main className="content"><div className="adminHead"><div><span className="eyebrow green">لوحة الإدارة</span><h1>إدارة منصة تأمين الرحلة</h1><p className="muted">بيانات مباشرة من قاعدة البيانات.</p></div><div className="modalActions"><button className="outline" onClick={load} disabled={loading}>تحديث البيانات</button><button className="dangerCall" onClick={onLogout}><LogOut size={17}/> تسجيل الخروج</button></div></div>
  {loading?<div className="empty">جارٍ تحميل بيانات الإدارة…</div>:error?<div className="empty"><b>تعذر تحميل اللوحة</b><p>{error}</p></div>:<>
  <div className="metrics"><div><Bus/><small>شركات النقل</small><b>{companies.length}</b></div><div><Ticket/><small>الرحلات المسجلة</small><b>{trips.length}</b></div><div><ShieldCheck/><small>الشركات المعتمدة</small><b>{companies.filter(x=>x.verified).length}</b></div></div>
- <div className="adminTabs"><button className={tab==='companies'?'active':''} onClick={()=>setTab('companies')}>الشركات</button><button className={tab==='trips'?'active':''} onClick={()=>setTab('trips')}>الرحلات</button><button className={tab==='subscriptions'?'active':''} onClick={()=>setTab('subscriptions')}>اشتراكات الشركات</button><button className={tab==='parcels'?'active':''} onClick={()=>setTab('parcels')}>الطرود</button><button className={tab==='verify'?'active':''} onClick={()=>setTab('verify')}>التحقق من التذاكر</button></div>
- {tab==='subscriptions'?<AdminCompanySubscriptions session={session} notify={notify}/>:tab==='parcels'?<ParcelOperations isAdmin notify={notify}/>:tab==='verify'?<TicketVerification notify={notify}/>:tab==='companies'?<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>الهاتف</th><th>حالة الاعتماد</th><th>تاريخ التسجيل</th></tr></thead><tbody>{companies.map(c=><tr key={c.id}><td>{c.name}</td><td><a href={'tel:'+c.phone}>{c.phone}</a></td><td><span className="status">{c.verified?'معتمدة':'بانتظار المراجعة'}</span></td><td>{new Date(c.created_at).toLocaleDateString('ar-SD')}</td></tr>)}</tbody></table></div>:<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>المسار</th><th>المغادرة</th><th>الباص</th><th>السعر</th><th>الحالة</th></tr></thead><tbody>{trips.map(t=><tr key={t.id}><td>{t.operators?.name||'—'}</td><td>{t.origin_city} ← {t.destination_city}</td><td>{new Date(t.departure_at).toLocaleString('ar-SD')}</td><td>{t.buses?.name||'—'} ({t.buses?.seat_count||0})</td><td>{money(Number(t.price_sdg))}</td><td>{t.status}</td></tr>)}</tbody></table></div>}
+ <div className="adminTabs"><button className={tab==='companies'?'active':''} onClick={()=>setTab('companies')}>الشركات</button><button className={tab==='trips'?'active':''} onClick={()=>setTab('trips')}>الرحلات</button><button className={tab==='payments'?'active':''} onClick={()=>setTab('payments')}>مدفوعات الركاب</button><button className={tab==='subscriptions'?'active':''} onClick={()=>setTab('subscriptions')}>اشتراكات الشركات</button><button className={tab==='parcels'?'active':''} onClick={()=>setTab('parcels')}>الطرود</button><button className={tab==='verify'?'active':''} onClick={()=>setTab('verify')}>التحقق من التذاكر</button></div>
+ {tab==='payments'?<AdminTripPayments session={session} notify={notify}/>:tab==='subscriptions'?<AdminCompanySubscriptions session={session} notify={notify}/>:tab==='parcels'?<ParcelOperations isAdmin notify={notify}/>:tab==='verify'?<TicketVerification notify={notify}/>:tab==='companies'?<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>الهاتف</th><th>حالة الاعتماد</th><th>تاريخ التسجيل</th></tr></thead><tbody>{companies.map(c=><tr key={c.id}><td>{c.name}</td><td><a href={'tel:'+c.phone}>{c.phone}</a></td><td><span className="status">{c.verified?'معتمدة':'بانتظار المراجعة'}</span></td><td>{new Date(c.created_at).toLocaleDateString('ar-SD')}</td></tr>)}</tbody></table></div>:<div className="tableWrap"><table><thead><tr><th>الشركة</th><th>المسار</th><th>المغادرة</th><th>الباص</th><th>السعر</th><th>الحالة</th></tr></thead><tbody>{trips.map(t=><tr key={t.id}><td>{t.operators?.name||'—'}</td><td>{t.origin_city} ← {t.destination_city}</td><td>{new Date(t.departure_at).toLocaleString('ar-SD')}</td><td>{t.buses?.name||'—'} ({t.buses?.seat_count||0})</td><td>{money(Number(t.price_sdg))}</td><td>{t.status}</td></tr>)}</tbody></table></div>}
  </>}
  </main>
 }
